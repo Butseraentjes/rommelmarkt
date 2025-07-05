@@ -1399,7 +1399,7 @@ async function deleteMarket(marketId) {
   try {
     await deleteDoc(doc(db, 'rommelmarkten', marketId));
     
-    showSuccessMessage('Markt succesvol verwijderd!');
+    showSuccessMessage('Markt succesvol verwijderd! 🗑️');
     
     // Remove from local array
     allMarkets = allMarkets.filter(m => m.id !== marketId);
@@ -1407,6 +1407,7 @@ async function deleteMarket(marketId) {
     // Refresh display
     applyFilters();
     updateStats();
+    loadHeroMarkets();
     
     console.log('Markt verwijderd:', market.naam);
     
@@ -1416,5 +1417,7 @@ async function deleteMarket(marketId) {
   }
 }
 
-// Make deleteMarket globally accessible
-window.deleteMarket = deleteMarket;
+// Make deleteMarket globally accessible for onclick handlers
+if (typeof window !== 'undefined') {
+  window.deleteMarket = deleteMarket;
+}

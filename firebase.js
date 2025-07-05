@@ -44,7 +44,7 @@ const provider = new GoogleAuthProvider();
 // 🗃️ Firestore database
 const db = getFirestore(app);
 
-// 📅 Helper functies voor datum/tijd - FIXED VERSIE
+// 📅 Helper functies voor datum/tijd - FIXED VERSION
 export const formatDate = (timestamp) => {
   if (!timestamp || typeof timestamp.toDate !== 'function') {
     return 'Datum onbekend';

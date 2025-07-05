@@ -403,18 +403,20 @@ function card(m){
   const evt=eventTypes[m.type]||eventTypes.rommelmarkt;
   
   // Veilige datum formattering
-  let fdt;
+  let dayName = 'Datum onbekend';
+  let timeString = '';
+  
   try {
-    fdt = formatDateTime(m.datumStart);
-    console.log('📅 Formatted date for', m.naam, ':', fdt);
+    if (m.datumStart && typeof m.datumStart.toDate === 'function') {
+      const date = m.datumStart.toDate();
+      dayName = date.toLocaleDateString('nl-NL', { weekday: 'long' });
+      timeString = date.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+      console.log('📅 Direct date formatting for', m.naam, '- Day:', dayName, 'Time:', timeString);
+    } else {
+      console.log('❌ No valid datumStart for:', m.naam);
+    }
   } catch (e) {
     console.error('❌ Error formatting date for:', m.naam, e);
-    // Fallback naar basis datum formatting
-    const date = dateFromFS(m.datumStart);
-    fdt = {
-      dayName: date.toLocaleDateString('nl-NL', { weekday: 'long' }),
-      time: date.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
-    };
   }
   
   // Debug de waardes die gebruikt worden
@@ -423,14 +425,15 @@ function card(m){
     locatie: m.locatie,
     type: m.type,
     evt: evt,
-    fdt: fdt
+    dayName: dayName,
+    timeString: timeString
   });
   
   a.innerHTML=`${m.imageUrl?`<img src="${m.imageUrl}" alt="${escapeHtml(m.naam || 'Evenement')}" class="market-image" loading="lazy">`:`<div class="market-image" style="background:linear-gradient(135deg,${getGradient(m.type)});display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;">${evt.icon}</div>`}
     <div class="market-card-content">
       <div class="market-type-badge type-${m.type}">${evt.icon} ${evt.label}</div>
       <h3>${escapeHtml(m.naam || 'Onbekend evenement')}</h3>
-      <p style="color:#555;font-size:.875rem;">${fdt.dayName} • ${fdt.time}</p>
+      <p style="color:#555;font-size:.875rem;">${dayName} • ${timeString}</p>
       <p style="color:#777;font-size:.75rem;">${escapeHtml(m.locatie || 'Locatie onbekend')}</p>
     </div>`;
   return a;

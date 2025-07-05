@@ -1,4 +1,336 @@
-import { 
+// Load and display markets
+async function loadMarkets() {
+  try {
+    showLoadingState();
+    
+    // Tijdelijke fallback zonder status filter als index nog niet bestaat
+    let q;
+    try {
+      q = query(
+        collection(db, 'rommelmarkten'),
+        where('status', '==', 'actief'),
+        orderBy('datumStart', 'asc')
+      );
+    } catch (indexError) {
+      console.log('Index nog niet klaar, gebruik eenvoudige query...');
+      q = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('datumStart', 'asc')
+      );
+    }
+    
+    const querySnapshot = await getDocs(q);
+    allMarkets = [];
+
+    querySnapshot.forEach((doc) => {
+      const market = { id: doc.id, ...doc.data() };
+      
+      // Filter op actieve status en toekomstige evenementen
+      const now = new Date();
+      const marketDate = market.datumStart.toDate();
+      const isActive = !market.status || market.status === 'actief';
+      
+      if (marketDate > now && isActive) {
+        allMarkets.push(market);
+      }
+    });
+
+    // Reset pagination
+    currentPage = 1;
+    
+    // Apply current filters
+    applyFilters();
+    updateStats();
+
+  } catch (error) {
+    console.error('Fout bij laden evenementen:', error);
+    
+    // Probeer backup query zonder where clause
+    try {
+      console.log('Probeer backup query...');
+      const backupQuery = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('toegevoegdOp', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(backupQuery);
+      allMarkets = [];
+
+      querySnapshot.forEach((doc) => {
+        const market = { id: doc.id, ...doc.data() };
+        const now = new Date();
+        const marketDate = market.datumStart.toDate();
+        
+        if (marketDate > now) {
+          allMarkets.push(market);
+        }
+      });
+      
+      // Sorteer handmatig op datum
+      allMarkets.sort((a, b) => a.datumStart.toDate() - b.datumStart.toDate());
+      
+      currentPage = 1;
+      applyFilters();
+      updateStats();
+      
+    } catch (backupError) {
+      console.error('Ook backup query mislukt:', backupError);
+      showErrorState();
+    }
+  }
+}
+
+function showLoadingState() {
+  loadingMarketsDiv.style.display = 'block';
+  marketsContainer.style.display = 'none';
+  noMarketsDiv.style.display = 'none';
+  loadMoreContainer.style.display = 'none';
+}
+
+function applyFilters() {
+  const typeFilter = filterType.value.toLowerCase();
+  const locationFilter = filterLocation.value.toLowerCase();
+  const dateFilter = filterDate.value;
+  
+  filteredMarkets = allMarkets.filter(market => {
+    // Type filter
+    if (typeFilter && market.type !== typeFilter) {
+      return false;
+    }
+    
+    // Location filter
+    if (locationFilter) {
+      const searchText = `${market.locatie} ${market.naam} ${market.organisator || ''}`.toLowerCase();
+      if (!searchText.includes(locationFilter)) {
+        return false;
+      }
+    }
+    
+    // Date filter
+    if (dateFilter) {
+      const marketDate = market.datumStart.toDate();
+      const now = new Date();
+      
+      switch (dateFilter) {
+        case 'today':
+          if (!isSameDay(marketDate, now)) return false;
+          break;
+        case 'tomorrow':
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          if (!isSameDay(marketDate, tomorrow)) return false;
+          break;
+        case 'week':
+          const weekEnd = new Date(now);
+          weekEnd.setDate(weekEnd.getDate() + 7);
+          if (marketDate > weekEnd) return false;
+          break;
+        case 'weekend':
+          const day = marketDate.getDay();
+          if (day !== 0 && day !== 6) return false; // 0 = Sunday, 6 = Saturday
+          break;
+        case 'month':
+          if (marketDate.getMonth() !== now.getMonth() || marketDate.getFullYear() !== now.getFullYear()) {
+            return false;
+          }
+          break;
+      }
+    }
+    
+    return true;
+  });
+  
+  // Reset to first page when filters change
+  currentPage = 1;
+  displayMarkets();
+  updateResultsInfo();
+}
+
+function displayMarkets() {
+  loadingMarketsDiv.style.display = 'none';
+  
+  if (filteredMarkets.length === 0) {
+    marketsContainer.style.display = 'none';
+    noMarketsDiv.style.display = 'block';
+    loadMoreContainer.style.display = 'none';
+    return;
+  }
+  
+  noMarketsDiv.style.display = 'none';
+  marketsContainer.style.display = currentView === 'grid' ? 'grid' : 'block';
+  marketsContainer.className = currentView === 'grid' ? 'markets-grid' : 'markets-list';
+  
+  // Calculate pagination
+  const startIndex = (currentPage - 1) * marketsPerPage;
+  const endIndex = Math.min(startIndex + marketsPerPage, filteredMarkets.length);
+  const marketsToShow = filteredMarkets.slice(0, endIndex);
+  
+  // Clear container and add markets
+  marketsContainer.innerHTML = '';
+  marketsToShow.forEach(market => {
+    const marketElement = createMarketCard(market);
+    marketsContainer.appendChild(marketElement);
+  });
+  
+  // Show/hide load more button
+  if (endIndex < filteredMarkets.length) {
+    loadMoreContainer.style.display = 'block';
+    loadMoreBtn.textContent = `Meer laden (${filteredMarkets.length - endIndex} resterende)`;
+  } else {
+    loadMoreContainer.style.display = 'none';
+  }
+}
+
+function loadMoreMarkets() {
+  currentPage++;
+  displayMarkets();
+}
+
+function createMarketCard(market) {
+  const card = document.createElement('div');
+  card.className = 'market-card';
+  
+  const eventType = eventTypes[market.type] || eventTypes.rommelmarkt;
+  const dateTime = formatDateTime(market.datumStart);
+  const endTime = market.datumEind ? formatTime(market.datumEind) : null;
+  
+  if (currentView === 'list') {
+    card.innerHTML = createListView(market, eventType, dateTime, endTime);
+  } else {
+    card.innerHTML = createGridView(market, eventType, dateTime, endTime);
+  }
+  
+  return card;
+}
+
+function createGridView(market, eventType, dateTime, endTime) {
+  return `
+    <div class="market-date-badge">
+      ${dateTime.dayMonth}
+    </div>
+    
+    <div class="market-type-badge ${eventType.color}">
+      ${eventType.icon} ${eventType.label}
+    </div>
+    
+    <div class="market-card-content">
+      <h3>${escapeHtml(market.naam)}</h3>
+      
+      <div class="market-date-time">
+        📅 ${dateTime.dayName}
+        <br>
+        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+      </div>
+      
+      <div class="market-details-grid">
+        <div class="market-detail">
+          <span class="market-detail-icon">📍</span>
+          <span>${escapeHtml(market.locatie)}</span>
+        </div>
+        
+        ${market.organisator ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">👥</span>
+            <span>${escapeHtml(market.organisator)}</span>
+          </div>
+        ` : ''}
+        
+        ${market.aantalStanden ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">🏪</span>
+            <span>${market.aantalStanden} standjes</span>
+          </div>
+        ` : ''}
+        
+        ${market.standgeld ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">💰</span>
+            <span>€${market.standgeld.toFixed(2)} per meter</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${market.beschrijving ? `
+        <div class="market-description">
+          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
+        </div>
+      ` : ''}
+      
+      ${market.contact ? `
+        <div class="market-detail">
+          <span class="market-detail-icon">📞</span>
+          <span>${escapeHtml(market.contact)}</span>
+        </div>
+      ` : ''}
+    </div>
+    
+    <div class="market-added-by">
+      Toegevoegd op ${formatDate(market.toegevoegdOp)}
+    </div>
+  `;
+}
+
+function createListView(market, eventType, dateTime, endTime) {
+  return `
+    <div class="market-info">
+      <div class="market-type-badge ${eventType.color}">
+        ${eventType.icon} ${eventType.label}
+      </div>
+      <h3>${escapeHtml(market.naam)}</h3>
+      <div class="market-detail">
+        <span class="market-detail-icon">📍</span>
+        <span>${escapeHtml(market.locatie)}</span>
+      </div>
+      ${market.organisator ? `
+        <div class="market-detail">
+          <span class="market-detail-icon">👥</span>
+          <span>${escapeHtml(market.organisator)}</span>
+        </div>
+      ` : ''}
+    </div>
+    <div class="market-date-compact">
+      ${dateTime.dayName}<br>
+      ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+    </div>
+  `;
+}
+
+function clearFilters() {
+  filterType.value = '';
+  filterLocation.value = '';
+  filterDate.value = '';
+  applyFilters();
+}
+
+function switchView(view) {
+  currentView = view;
+  
+  // Update button states
+  viewGridBtn.classList.toggle('active', view === 'grid');
+  viewListBtn.classList.toggle('active', view === 'list');
+  
+  // Redisplay markets
+  displayMarkets();
+}
+
+function updateResultsInfo() {
+  const count = filteredMarkets.length;
+  const word = count === 1 ? 'evenement' : 'evenementen';
+  resultsCount.textContent = `${count} ${word} gevonden`;
+}
+
+// Helper functions
+function isSameDay(date1, date2) {
+  return date1.getDate() === date2.getDate() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getFullYear() === date2.getFullYear();
+}
+
+// Update the old filterMarkets function to use new applyFilters
+function filterMarkets() {
+  applyFilters();
+}
+      import { 
   auth, 
   provider, 
   db, 
@@ -32,6 +364,15 @@ const marketsContainer = document.getElementById('markets-container');
 const noMarketsDiv = document.getElementById('no-markets');
 const filterType = document.getElementById('filter-type');
 const filterLocation = document.getElementById('filter-location');
+const filterDate = document.getElementById('filter-date');
+const clearFiltersBtn = document.getElementById('clear-filters');
+const viewGridBtn = document.getElementById('view-grid');
+const viewListBtn = document.getElementById('view-list');
+const resultsCount = document.getElementById('results-count');
+const loadingMarketsDiv = document.getElementById('loading-markets');
+const loadMoreBtn = document.getElementById('load-more-btn');
+const loadMoreContainer = document.getElementById('load-more-container');
+const suggestEventBtn = document.getElementById('suggest-event');
 const totalMarketsSpan = document.getElementById('total-markets');
 const upcomingMarketsSpan = document.getElementById('upcoming-markets');
 
@@ -44,8 +385,12 @@ const importResults = document.getElementById('import-results');
 
 // Global variables
 let allMarkets = [];
+let filteredMarkets = [];
 let currentUser = null;
 let isAdmin = false;
+let currentView = 'grid'; // 'grid' or 'list'
+let marketsPerPage = 12;
+let currentPage = 1;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -58,8 +403,24 @@ function setupEventListeners() {
   loginBtn.addEventListener('click', handleLogin);
   logoutBtn.addEventListener('click', handleLogout);
   marketForm.addEventListener('submit', handleAddMarket);
-  filterType.addEventListener('change', filterMarkets);
-  filterLocation.addEventListener('input', debounce(filterMarkets, 300));
+  
+  // Filter event listeners
+  filterType.addEventListener('change', applyFilters);
+  filterLocation.addEventListener('input', debounce(applyFilters, 300));
+  filterDate.addEventListener('change', applyFilters);
+  clearFiltersBtn.addEventListener('click', clearFilters);
+  
+  // View toggle listeners
+  viewGridBtn.addEventListener('click', () => switchView('grid'));
+  viewListBtn.addEventListener('click', () => switchView('list'));
+  
+  // Load more listener
+  loadMoreBtn.addEventListener('click', loadMoreMarkets);
+  
+  // Suggest event listener
+  suggestEventBtn.addEventListener('click', () => {
+    document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
+  });
   
   // Admin event listeners
   bulkImportForm.addEventListener('submit', handleBulkImport);

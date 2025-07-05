@@ -2,17 +2,39 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rommelmarkt in je buurt</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <h1>Welkom bij Rommelmarkt in je buurt</h1>
+  
   <div id="login-container">
     <button id="login-btn">Login met Google</button>
   </div>
+  
   <div id="main-content" style="display: none;">
-    <p id="user-email"></p>
-    <button id="add-market">Rommelmarkt toevoegen</button>
+    <div id="user-info">
+      <p id="user-email"></p>
+      <button id="logout-btn">Uitloggen</button>
+    </div>
+    
+    <form id="market-form">
+      <h3>Rommelmarkt toevoegen</h3>
+      <input type="text" id="market-name" placeholder="Naam van de rommelmarkt" required>
+      <input type="text" id="market-location" placeholder="Locatie (straat, stad)" required>
+      <input type="date" id="market-date" required>
+      <input type="time" id="market-time" required>
+      <textarea id="market-description" placeholder="Beschrijving (optioneel)"></textarea>
+      <button type="submit">Rommelmarkt toevoegen</button>
+    </form>
+    
+    <div id="markets-list">
+      <h3>Rommelmarkten in de buurt</h3>
+      <div id="markets-container"></div>
+    </div>
   </div>
+  
   <script type="module" src="main.js"></script>
 </body>
 </html>

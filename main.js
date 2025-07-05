@@ -187,8 +187,18 @@ function setupEventListeners() {
 // Functie om login interface te tonen wanneer nodig
 function showLoginInterface() {
   console.log('🔐 Showing login interface on user request');
+  
+  // Check if user is already logged in
+  if (currentUser) {
+    console.log('👤 User already logged in, redirecting to add section');
+    document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  
   if (loginContainer) {
     loginContainer.style.display = 'flex';
+    loginContainer.style.visibility = 'visible';
+    console.log('✅ Login container shown');
   }
 }
 
@@ -213,6 +223,13 @@ async function handleLogin() {
     
     const result = await signInWithPopup(auth, provider);
     console.log('✅ Login succesvol:', result.user.email);
+    
+    // Force hide login container immediately after successful login
+    if (loginContainer) {
+      loginContainer.style.display = 'none';
+      loginContainer.style.visibility = 'hidden';
+      console.log('🚫 Login container forcefully hidden after login');
+    }
     
   } catch (err) {
     console.error('❌ Login fout:', err);
@@ -253,21 +270,24 @@ onAuthStateChanged(auth, (user) => {
     // User is logged in
     console.log('✅ User logged in, showing main content');
     
-    // Hide login container
+    // BELANGRIJK: Hide login container meteen
     if (loginContainer) {
       loginContainer.style.display = 'none';
-      console.log('🚫 Login container hidden');
+      loginContainer.style.visibility = 'hidden';
+      console.log('🚫 Login container forcefully hidden');
     }
     
     // Show main content
     if (mainContent) {
       mainContent.style.display = 'block';
+      mainContent.style.visibility = 'visible';
       console.log('✅ Main content shown');
     }
     
     // Show user bar
     if (userBar) {
       userBar.style.display = 'block';
+      userBar.style.visibility = 'visible';
       console.log('👤 User bar shown');
     }
     
@@ -283,6 +303,7 @@ onAuthStateChanged(auth, (user) => {
     
     if (adminPanel) {
       adminPanel.style.display = isAdmin ? 'block' : 'none';
+      adminPanel.style.visibility = isAdmin ? 'visible' : 'hidden';
       console.log('🔧 Admin panel:', isAdmin ? 'shown' : 'hidden');
     }
     
@@ -290,31 +311,37 @@ onAuthStateChanged(auth, (user) => {
     const toevoegenSection = document.getElementById('toevoegen');
     if (toevoegenSection) {
       toevoegenSection.style.display = 'block';
+      toevoegenSection.style.visibility = 'visible';
       console.log('➕ Toevoegen section shown');
     }
+    
+    // Update navigation to show logout instead of login
+    updateNavigationForLoggedInUser();
     
     // Load markets for authenticated users
     loadMarkets();
   } else {
-    // User is logged out - FOR PUBLIC VIEWING, DON'T SHOW LOGIN CONTAINER
+    // User is logged out - FOR PUBLIC VIEWING
     console.log('👤 User logged out, setting up public view');
     
-    // BELANGRIJKE WIJZIGING: Voor publieke weergave, toon GEEN login container
-    // Alleen tonen als de gebruiker expliciet wil inloggen
+    // Keep login container hidden for public view
     if (loginContainer) {
-      loginContainer.style.display = 'none'; // Verander van 'flex' naar 'none'
+      loginContainer.style.display = 'none';
+      loginContainer.style.visibility = 'hidden';
       console.log('🚫 Login container hidden for public view');
     }
     
     // Keep main content visible for public viewing
     if (mainContent) {
       mainContent.style.display = 'block';
+      mainContent.style.visibility = 'visible';
       console.log('📄 Main content kept visible for public');
     }
     
     // Hide user bar
     if (userBar) {
       userBar.style.display = 'none';
+      userBar.style.visibility = 'hidden';
       console.log('🚫 User bar hidden');
     }
     
@@ -324,20 +351,63 @@ onAuthStateChanged(auth, (user) => {
     
     if (toevoegenSection) {
       toevoegenSection.style.display = 'none';
+      toevoegenSection.style.visibility = 'hidden';
       console.log('🚫 Toevoegen section hidden');
     }
     if (adminSection) {
       adminSection.style.display = 'none';
+      adminSection.style.visibility = 'hidden';
       console.log('🚫 Admin section hidden');
     }
+    
+    // Update navigation for logged out user
+    updateNavigationForLoggedOutUser();
     
     currentUser = null;
     isAdmin = false;
     
     // Load markets for public viewing
-    loadMarketsPublic();
+    if (!hasInitializedMarkets) {
+      loadMarketsPublic();
+    }
   }
 });
+
+// Update navigation for logged in user
+function updateNavigationForLoggedInUser() {
+  console.log('🔄 Updating navigation for logged in user');
+  
+  // Hide all login buttons
+  const loginButtons = document.querySelectorAll('.nav-login-btn, .header-login-btn, .show-login');
+  loginButtons.forEach(btn => {
+    btn.style.display = 'none';
+    btn.style.visibility = 'hidden';
+  });
+  
+  // Show logout button in user bar (already handled above)
+  // Make "Toevoegen" links work normally instead of showing login
+  const toevoegenLinks = document.querySelectorAll('a[href="#toevoegen"]');
+  toevoegenLinks.forEach(link => {
+    // Remove any login event listeners
+    link.replaceWith(link.cloneNode(true));
+  });
+  
+  console.log('✅ Navigation updated for logged in user');
+}
+
+// Update navigation for logged out user  
+function updateNavigationForLoggedOutUser() {
+  console.log('🔄 Updating navigation for logged out user');
+  
+  // Show login buttons
+  const loginButtons = document.querySelectorAll('.nav-login-btn, .header-login-btn, .show-login');
+  loginButtons.forEach(btn => {
+    btn.style.display = '';
+    btn.style.visibility = 'visible';
+  });
+  
+  console.log('✅ Navigation updated for logged out user');
+}
 
 // Market form handling
 async function handleAddMarket(e) {

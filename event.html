@@ -1,5 +1,3 @@
-
-<!-- event.html -->
 <!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -12,34 +10,98 @@
   <main id="event-root" style="padding:4rem 1rem; max-width:800px; margin:auto;">
     <!-- content wordt dynamisch geladen -->
   </main>
-
   <script type="module">
-    import { db, doc, getDoc, formatDate, formatTime, formatDateTime, eventTypes } from './firebase.js';
-
+    import { db, doc, getDoc, formatDate, formatTime, formatDateTime, eventTypes, Timestamp } from './firebase.js';
+    
     // helper om query-string te lezen
     const params = new URLSearchParams(location.search);
     const id = params.get('id');
     const root = document.getElementById('event-root');
-
+    
     if (!id) {
       root.innerHTML = '<p>Geen evenement-ID opgegeven.</p>';
       throw new Error('Missing id');
     }
-
+    
+    // Helper functie om datums veilig te formatteren
+    function safeDateFormat(dateValue) {
+      if (!dateValue) return 'Onbekend';
+      
+      // Als het een Firestore Timestamp is
+      if (dateValue && typeof dateValue.toDate === 'function') {
+        return dateValue.toDate().toLocaleDateString('nl-NL', {
+          year: 'numeric',
+          month: 'long', 
+          day: 'numeric'
+        });
+      }
+      
+      // Als het een gewone Date is
+      if (dateValue instanceof Date) {
+        return dateValue.toLocaleDateString('nl-NL', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+      
+      // Als het een string is, probeer het te parsen
+      if (typeof dateValue === 'string') {
+        const date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleDateString('nl-NL', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+        }
+      }
+      
+      return 'Onbekend';
+    }
+    
     try {
       const snap = await getDoc(doc(db, 'rommelmarkten', id));
       if (!snap.exists()) {
         root.innerHTML = '<p>Dit evenement bestaat niet (meer).</p>';
         return;
       }
+      
       const ev = snap.data();
       const typeInfo = eventTypes[ev.type] || eventTypes.rommelmarkt;
-      const dt = formatDateTime(ev.datumStart);
-
+      
+      // Veilig formatteren van de start datum
+      let startDateText = 'Datum onbekend';
+      let startTimeText = '';
+      
+      if (ev.datumStart) {
+        try {
+          const dt = formatDateTime(ev.datumStart);
+          startDateText = dt.date;
+          startTimeText = dt.time;
+        } catch (e) {
+          console.error('Error formatting start date:', e);
+          startDateText = safeDateFormat(ev.datumStart);
+        }
+      }
+      
+      // Eindtijd formatteren als die er is
+      let endTimeText = '';
+      if (ev.datumEind) {
+        try {
+          endTimeText = ' – ' + formatTime(ev.datumEind);
+        } catch (e) {
+          console.error('Error formatting end time:', e);
+        }
+      }
+      
+      // Toegevoegd op datum formatteren
+      const addedOnText = safeDateFormat(ev.toegevoegdOp);
+      
       root.innerHTML = `
         <h1 style="margin-bottom:1rem;">${ev.naam}</h1>
         <p><strong>${typeInfo.icon} ${typeInfo.label}</strong></p>
-        <p>📅 ${dt.fullDate} &nbsp; 🕑 ${dt.time}${ev.datumEind ? ' – '+formatTime(ev.datumEind) : ''}</p>
+        <p>📅 ${startDateText} &nbsp; 🕑 ${startTimeText}${endTimeText}</p>
         <p>📍 ${ev.locatie}</p>
         ${ev.organisator ? `<p>👥 ${ev.organisator}</p>` : ''}
         ${ev.aantalStanden ? `<p>🏪 ${ev.aantalStanden} standjes</p>` : ''}
@@ -48,11 +110,11 @@
         <hr style="margin:2rem 0;">
         <p>${(ev.beschrijving || 'Geen extra beschrijving.').replace(/\n/g,'<br>')}</p>
         ${ev.imageUrl ? `<img src="${ev.imageUrl}" alt="${ev.naam}" style="max-width:100%;margin-top:2rem;border-radius:8px;">` : ''}
-        <p style="margin-top:2rem; font-size:.875rem; color:#666;">Toegevoegd op ${formatDate(ev.toegevoegdOp)}</p>
+        <p style="margin-top:2rem; font-size:.875rem; color:#666;">Toegevoegd op ${addedOnText}</p>
         <p><a href="index.html">← Terug naar overzicht</a></p>
       `;
     } catch (err) {
-      console.error(err);
+      console.error('Error loading event:', err);
       root.innerHTML = '<p>Fout bij laden van evenement.</p>';
     }
   </script>

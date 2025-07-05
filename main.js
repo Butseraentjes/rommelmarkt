@@ -1,437 +1,4 @@
-// Helper functions
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-function escapeHtml(text) {
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
-  return text.replace(/[&<>"']/g, function(m) { return map[m]; });
-}
-
-function isSameDay(date1, date2) {
-  return date1.getDate() === date2.getDate() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getFullYear() === date2.getFullYear();
-}
-
-// Admin Functions
-function showAdminPanel() {
-  // Hide all sections
-  document.querySelectorAll('section').forEach(section => {
-    section.classList.add('hidden');
-  });
-  
-  // Show admin section
-  document.getElementById('admin').classList.remove('hidden');
-  
-  // Update nav active state
-  document.querySelectorAll('nav a').forEach(l => l.classList.remove('active'));
-  
-  // Load admin markets
-  loadAdminMarkets();
-}
-
-async function loadAdminMarkets() {
-  if (!isAdmin || !adminMarkets) return;
-  
-  try {
-    const q = query(collection(db, 'rommelmarkten'), orderBy('toegevoegdOp', 'desc'));
-    const querySnapshot = await getDocs(q);
-    
-    adminMarkets.innerHTML = '';
-    
-    if (querySnapshot.empty) {
-      adminMarkets.innerHTML = '<p>Geen markten gevonden.</p>';
-      return;
-    }
-    
-    querySnapshot.forEach((doc) => {
-      const market = { id: doc.id, ...doc.data() };
-      const marketElement = createAdminMarketItem(market);
-      adminMarkets.appendChild(marketElement);
-    });
-    
-  } catch (error) {
-    console.error('Fout bij laden admin markten:', error);
-    adminMarkets.innerHTML = '<p>Fout bij laden markten.</p>';
-  }
-}
-
-function createAdminMarketItem(market) {
-  const item = document.createElement('div');
-  item.className = 'admin-market-item';
-  
-  const dateTime = market.datumStart ? formatDateTime(market.datumStart) : { date: 'Onbekend' };
-  
-  item.innerHTML = `
-    <div class="admin-market-info">
-      <h4>${escapeHtml(market.naam)}</h4>
-      <p>${escapeHtml(market.locatie)} • ${dateTime.date} • Status: ${market.status || 'actief'}</p>
-    </div>
-    <div class="admin-market-actions">
-      <button onclick="deleteMarket('${market.id}')" class="btn btn-danger btn-small">Verwijder</button>
-    </div>
-  `;
-  
-  return item;
-}
-
-async function deleteMarket(marketId) {
-  if (!isAdmin) {
-    alert('Je hebt geen admin rechten.');
-    return;
-  }
-
-  const market = allMarkets.find(m => m.id === marketId);
-  if (!market) {
-    alert('Markt niet gevonden.');
-    return;
-  }
-
-  const confirmed = confirm(`Weet je zeker dat je "${market.naam}" wilt verwijderen?`);
-  if (!confirmed) return;
-
-  try {
-    await deleteDoc(doc(db, 'rommelmarkten', marketId));
-    
-    alert('Markt succesvol verwijderd!');
-    
-    // Remove from local array
-    allMarkets = allMarkets.filter(m => m.id !== marketId);
-    
-    // Refresh displays
-    applyFilters();
-    loadAdminMarkets();
-    
-  } catch (error) {
-    console.error('Fout bij verwijderen van markt:', error);
-    alert('Er ging iets mis bij het verwijderen. Probeer opnieuw.');
-  }
-}
-
-async function handleBulkImport(e) {
-  e.preventDefault();
-  
-  if (!isAdmin) {
-    alert('Je hebt geen admin rechten.');
-    return;
-  }
-
-  const rawData = bulkDataTextarea.value.trim();
-  if (!rawData) {
-    showImportResult('Geen data ingevoerd.', 'error');
-    return;
-  }
-
-  try {
-    showImportResult('Data verwerken...', 'processing');
-    
-    const markets = parseRommelmarktData(rawData);
-    
-    if (markets.length === 0) {
-      showImportResult('Geen geldige rommelmarkten gevonden in de data.', 'error');
-      return;
-    }
-
-    showImportResult(`${markets.length} rommelmarkten gevonden. Importeren...`, 'processing');
-    
-    let imported = 0;
-    let errors = 0;
-    
-    for (let i = 0; i < markets.length; i++) {
-      try {
-        const marketData = {
-          ...markets[i],
-          userId: currentUser.uid,
-          email: currentUser.email,
-          toegevoegdOp: Timestamp.now(),
-          status: 'actief',
-          bron: 'bulk_import'
-        };
-        
-        await addDoc(collection(db, 'rommelmarkten'), marketData);
-        imported++;
-        
-      } catch (error) {
-        console.error('Fout bij importeren van markt:', error);
-        errors++;
-      }
-    }
-    
-    const resultMsg = `Import voltooid! ✅ ${imported} geïmporteerd, ❌ ${errors} fouten.`;
-    showImportResult(resultMsg, 'success');
-    
-    bulkDataTextarea.value = '';
-    loadMarkets();
-    loadAdminMarkets();
-    
-  } catch (error) {
-    console.error('Bulk import fout:', error);
-    showImportResult(`Fout bij importeren: ${error.message}`, 'error');
-  }
-}
-
-async function handleClearAll() {
-  if (!isAdmin) {
-    alert('Je hebt geen admin rechten.');
-    return;
-  }
-
-  const confirmed = confirm('⚠️ WAARSCHUWING: Dit zal ALLE rommelmarkten verwijderen! Ben je zeker?');
-  if (!confirmed) return;
-  
-  const doubleConfirm = confirm('🚨 LAATSTE KANS: Dit kan niet ongedaan gemaakt worden. Alle data wordt permanent verwijderd!');
-  if (!doubleConfirm) return;
-
-  try {
-    showImportResult('Alle data verwijderen...', 'processing');
-    
-    const q = query(collection(db, 'rommelmarkten'));
-    const querySnapshot = await getDocs(q);
-    
-    let deleted = 0;
-    for (const docSnapshot of querySnapshot.docs) {
-      await deleteDoc(doc(db, 'rommelmarkten', docSnapshot.id));
-      deleted++;
-    }
-    
-    showImportResult(`Alle data verwijderd! ${deleted} evenementen gewist.`, 'success');
-    allMarkets = [];
-    applyFilters();
-    loadAdminMarkets();
-    
-  } catch (error) {
-    console.error('Fout bij verwijderen:', error);
-    showImportResult(`Fout bij verwijderen: ${error.message}`, 'error');
-  }
-}
-
-function showImportResult(message, type) {
-  if (!importResults) return;
-  
-  importResults.classList.remove('hidden');
-  importResults.className = `import-results ${type}`;
-  importResults.innerHTML = `<strong>${type === 'error' ? '❌ Fout:' : type === 'success' ? '✅ Succes:' : '⏳ Bezig:'}</strong> ${message}`;
-}
-
-function parseRommelmarktData(rawData) {
-  const markets = [];
-  const reorganizedData = reorganizeMarketData(rawData);
-  const blocks = reorganizedData.split(/^L\s*$/m).filter(block => block.trim());
-  
-  for (const block of blocks) {
-    try {
-      const market = parseMarketBlock(block);
-      if (market) {
-        markets.push(market);
-      }
-    } catch (error) {
-      console.warn('Kon blok niet verwerken:', error);
-    }
-  }
-  
-  return markets;
-}
-
-function reorganizeMarketData(rawData) {
-  const parts = rawData.split(/^L\s*$/m);
-  const reorganized = [];
-  let currentEventData = '';
-  
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
-    
-    const hasLocation = /^[A-Z\s-]+\s*\(\d{4}\)/.test(part);
-    const hasDate = /^(ma|di|wo|do|vr|za|zo)\s+\d{1,2}\s+\w+\s+\d{4}/.test(part);
-    
-    if (hasLocation) {
-      if (currentEventData) {
-        reorganized.push('L\n' + currentEventData);
-      }
-      currentEventData = part;
-    } else if (hasDate && currentEventData) {
-      currentEventData += '\n' + part;
-    } else if (currentEventData) {
-      currentEventData += '\n' + part;
-    }
-  }
-  
-  if (currentEventData) {
-    reorganized.push('L\n' + currentEventData);
-  }
-  
-  return reorganized.join('\n\n');
-}
-
-function parseMarketBlock(block) {
-  const lines = block.split('\n').map(line => line.trim()).filter(line => line && line !== 'L');
-  
-  if (lines.length < 2) return null;
-  
-  let plaats = '';
-  let postcode = '';
-  let adres = '';
-  let naam = '';
-  let datum = null;
-  let startTijd = '09:00';
-  let eindTijd = null;
-  let beschrijving = '';
-  let organisator = '';
-  let contact = '';
-  let standgeld = null;
-  let type = 'rommelmarkt';
-  
-  const firstLine = lines[0];
-  const plaatsMatch = firstLine.match(/^([A-Z\s-]+(?:\s*-\s*[A-Z\s]+)?)\s*\((\d{4})\)\s*(.*)$/);
-  if (plaatsMatch) {
-    plaats = plaatsMatch[1].trim();
-    postcode = plaatsMatch[2];
-    adres = plaatsMatch[3].trim();
-  }
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    const datumMatch = line.match(/^(ma|di|wo|do|vr|za|zo)\s+(\d{1,2})\s+(\w+)\s+(\d{4})$/i);
-    if (datumMatch) {
-      const [, , dag, maand, jaar] = datumMatch;
-      datum = parseDutchDate(`${dag} ${maand} ${jaar}`);
-      continue;
-    }
-    
-    const tijdMatch = line.match(/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/);
-    if (tijdMatch) {
-      const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
-      startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
-      eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
-      continue;
-    }
-    
-    if (line.includes('@') || line.includes('+32')) {
-      const parts = line.split('-');
-      if (parts.length >= 2) {
-        organisator = parts[0].trim();
-        contact = parts.slice(1).join('-').trim();
-      } else {
-        contact = line;
-      }
-      continue;
-    }
-    
-    const standgeldMatch = line.match(/standplaats\s*([\d,]+)\s*€/i);
-    if (standgeldMatch) {
-      standgeld = parseFloat(standgeldMatch[1].replace(',', '.'));
-      continue;
-    }
-    
-    if (!naam && line.length > 5 && line.length < 80 && 
-        !line.includes('http') && !line.includes('@') && 
-        !line.includes('(') && !line.match(/^\d/)) {
-      
-      if (!line.toLowerCase().includes('opstellen') && 
-          !line.toLowerCase().includes('ontruiming') &&
-          !line.toLowerCase().includes('bekijk details')) {
-        naam = line;
-      }
-    }
-    
-    const lowerLine = line.toLowerCase();
-    if (lowerLine.includes('garage')) type = 'garageverkoop';
-    if (lowerLine.includes('braderie')) type = 'braderie';
-    if (lowerLine.includes('kermis')) type = 'kermis';
-    if (lowerLine.includes('antiek') || lowerLine.includes('brocante')) type = 'antiekmarkt';
-    if (lowerLine.includes('feest')) type = 'feest';
-  }
-  
-  if (!naam) {
-    naam = `Rommelmarkt ${plaats}`;
-  }
-  
-  beschrijving = lines.slice(1, 6)
-    .filter(line => 
-      !line.includes('@') && 
-      !line.includes('http') && 
-      !line.match(/^\s*\d{1,2}:\d{2}/) &&
-      !line.match(/^(ma|di|wo|do|vr|za|zo)\s+\d/) &&
-      line.length > 15 && 
-      line.length < 150
-    )
-    .join(' ')
-    .substring(0, 200);
-  
-  if (!plaats || !datum) {
-    return null;
-  }
-  
-  const locatie = adres ? `${adres}, ${postcode} ${plaats}` : `Centrum, ${postcode} ${plaats}`;
-  
-  const startDateTime = new Date(`${datum}T${startTijd}`);
-  const endDateTime = eindTijd ? new Date(`${datum}T${eindTijd}`) : null;
-  
-  return {
-    naam: naam.substring(0, 100),
-    type: type,
-    locatie: locatie,
-    datumStart: Timestamp.fromDate(startDateTime),
-    datumEind: endDateTime ? Timestamp.fromDate(endDateTime) : null,
-    beschrijving: beschrijving,
-    organisator: organisator.substring(0, 100),
-    contact: contact.substring(0, 100),
-    aantalStanden: null,
-    standgeld: standgeld
-  };
-}
-
-function parseDutchDate(dateStr) {
-  const maanden = {
-    'januari': '01', 'februari': '02', 'maart': '03', 'april': '04',
-    'mei': '05', 'juni': '06', 'juli': '07', 'augustus': '08',
-    'september': '09', 'oktober': '10', 'november': '11', 'december': '12',
-    'jan': '01', 'feb': '02', 'mrt': '03', 'apr': '04', 'mei': '05',
-    'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09',
-    'okt': '10', 'nov': '11', 'dec': '12'
-  };
-  
-  const match = dateStr.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
-  if (match) {
-    const [, dag, maand, jaar] = match;
-    const maandNr = maanden[maand.toLowerCase()];
-    if (maandNr) {
-      return `${jaar}-${maandNr}-${dag.padStart(2, '0')}`;
-    }
-  }
-  
-  return null;
-}
-
-// Make deleteMarket globally accessible
-window.deleteMarket = deleteMarket;
-
-// Debug functions
-window.debugInfo = () => {
-  console.log('🔍 Debug Info:');
-  console.log('- Current User:', currentUser);
-  console.log('- Is Admin:', isAdmin);
-  console.log('- All Markets:', allMarkets);
-  console.log('- Filtered Markets:', filteredMarkets);
-};
-
-console.log('✅ Simple main.js loaded with admin functionality!');import { 
+import { 
   auth, 
   provider, 
   db, 
@@ -1043,12 +610,6 @@ async function prepareMarketData(formData) {
 }
 
 // Helper functions
-function isSameDay(date1, date2) {
-  return date1.getDate() === date2.getDate() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getFullYear() === date2.getFullYear();
-}
-
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -1072,12 +633,238 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
-// Debug functions
-window.debugInfo = () => {
-  console.log('🔍 Debug Info:');
-  console.log('- Current User:', currentUser);
-  console.log('- All Markets:', allMarkets);
-  console.log('- Filtered Markets:', filteredMarkets);
-};
+function isSameDay(date1, date2) {
+  return date1.getDate() === date2.getDate() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getFullYear() === date2.getFullYear();
+}
 
-console.log('✅ Simple main.js loaded!');
+// Admin Functions
+function showAdminPanel() {
+  // Hide all sections
+  document.querySelectorAll('section').forEach(section => {
+    section.classList.add('hidden');
+  });
+  
+  // Show admin section
+  document.getElementById('admin').classList.remove('hidden');
+  
+  // Update nav active state
+  document.querySelectorAll('nav a').forEach(l => l.classList.remove('active'));
+  
+  // Load admin markets
+  loadAdminMarkets();
+}
+
+async function loadAdminMarkets() {
+  if (!isAdmin || !adminMarkets) return;
+  
+  try {
+    const q = query(collection(db, 'rommelmarkten'), orderBy('toegevoegdOp', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    adminMarkets.innerHTML = '';
+    
+    if (querySnapshot.empty) {
+      adminMarkets.innerHTML = '<p>Geen markten gevonden.</p>';
+      return;
+    }
+    
+    querySnapshot.forEach((doc) => {
+      const market = { id: doc.id, ...doc.data() };
+      const marketElement = createAdminMarketItem(market);
+      adminMarkets.appendChild(marketElement);
+    });
+    
+  } catch (error) {
+    console.error('Fout bij laden admin markten:', error);
+    adminMarkets.innerHTML = '<p>Fout bij laden markten.</p>';
+  }
+}
+
+function createAdminMarketItem(market) {
+  const item = document.createElement('div');
+  item.className = 'admin-market-item';
+  
+  const dateTime = market.datumStart ? formatDateTime(market.datumStart) : { date: 'Onbekend' };
+  
+  item.innerHTML = `
+    <div class="admin-market-info">
+      <h4>${escapeHtml(market.naam)}</h4>
+      <p>${escapeHtml(market.locatie)} • ${dateTime.date} • Status: ${market.status || 'actief'}</p>
+    </div>
+    <div class="admin-market-actions">
+      <button onclick="deleteMarket('${market.id}')" class="btn btn-danger btn-small">Verwijder</button>
+    </div>
+  `;
+  
+  return item;
+}
+
+async function deleteMarket(marketId) {
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const market = allMarkets.find(m => m.id === marketId);
+  if (!market) {
+    alert('Markt niet gevonden.');
+    return;
+  }
+
+  const confirmed = confirm(`Weet je zeker dat je "${market.naam}" wilt verwijderen?`);
+  if (!confirmed) return;
+
+  try {
+    await deleteDoc(doc(db, 'rommelmarkten', marketId));
+    
+    alert('Markt succesvol verwijderd!');
+    
+    // Remove from local array
+    allMarkets = allMarkets.filter(m => m.id !== marketId);
+    
+    // Refresh displays
+    applyFilters();
+    loadAdminMarkets();
+    
+  } catch (error) {
+    console.error('Fout bij verwijderen van markt:', error);
+    alert('Er ging iets mis bij het verwijderen. Probeer opnieuw.');
+  }
+}
+
+async function handleBulkImport(e) {
+  e.preventDefault();
+  
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const rawData = bulkDataTextarea.value.trim();
+  if (!rawData) {
+    showImportResult('Geen data ingevoerd.', 'error');
+    return;
+  }
+
+  try {
+    showImportResult('Data verwerken...', 'processing');
+    
+    const markets = parseRommelmarktData(rawData);
+    
+    if (markets.length === 0) {
+      showImportResult('Geen geldige rommelmarkten gevonden in de data.', 'error');
+      return;
+    }
+
+    showImportResult(`${markets.length} rommelmarkten gevonden. Importeren...`, 'processing');
+    
+    let imported = 0;
+    let errors = 0;
+    
+    for (let i = 0; i < markets.length; i++) {
+      try {
+        const marketData = {
+          ...markets[i],
+          userId: currentUser.uid,
+          email: currentUser.email,
+          toegevoegdOp: Timestamp.now(),
+          status: 'actief',
+          bron: 'bulk_import'
+        };
+        
+        await addDoc(collection(db, 'rommelmarkten'), marketData);
+        imported++;
+        
+      } catch (error) {
+        console.error('Fout bij importeren van markt:', error);
+        errors++;
+      }
+    }
+    
+    const resultMsg = `Import voltooid! ✅ ${imported} geïmporteerd, ❌ ${errors} fouten.`;
+    showImportResult(resultMsg, 'success');
+    
+    bulkDataTextarea.value = '';
+    loadMarkets();
+    loadAdminMarkets();
+    
+  } catch (error) {
+    console.error('Bulk import fout:', error);
+    showImportResult(`Fout bij importeren: ${error.message}`, 'error');
+  }
+}
+
+async function handleClearAll() {
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const confirmed = confirm('⚠️ WAARSCHUWING: Dit zal ALLE rommelmarkten verwijderen! Ben je zeker?');
+  if (!confirmed) return;
+  
+  const doubleConfirm = confirm('🚨 LAATSTE KANS: Dit kan niet ongedaan gemaakt worden. Alle data wordt permanent verwijderd!');
+  if (!doubleConfirm) return;
+
+  try {
+    showImportResult('Alle data verwijderen...', 'processing');
+    
+    const q = query(collection(db, 'rommelmarkten'));
+    const querySnapshot = await getDocs(q);
+    
+    let deleted = 0;
+    for (const docSnapshot of querySnapshot.docs) {
+      await deleteDoc(doc(db, 'rommelmarkten', docSnapshot.id));
+      deleted++;
+    }
+    
+    showImportResult(`Alle data verwijderd! ${deleted} evenementen gewist.`, 'success');
+    allMarkets = [];
+    applyFilters();
+    loadAdminMarkets();
+    
+  } catch (error) {
+    console.error('Fout bij verwijderen:', error);
+    showImportResult(`Fout bij verwijderen: ${error.message}`, 'error');
+  }
+}
+
+function showImportResult(message, type) {
+  if (!importResults) return;
+  
+  importResults.classList.remove('hidden');
+  importResults.className = `import-results ${type}`;
+  importResults.innerHTML = `<strong>${type === 'error' ? '❌ Fout:' : type === 'success' ? '✅ Succes:' : '⏳ Bezig:'}</strong> ${message}`;
+}
+
+function parseRommelmarktData(rawData) {
+  const markets = [];
+  const reorganizedData = reorganizeMarketData(rawData);
+  const blocks = reorganizedData.split(/^L\s*$/m).filter(block => block.trim());
+  
+  for (const block of blocks) {
+    try {
+      const market = parseMarketBlock(block);
+      if (market) {
+        markets.push(market);
+      }
+    } catch (error) {
+      console.warn('Kon blok niet verwerken:', error);
+    }
+  }
+  
+  return markets;
+}
+
+function reorganizeMarketData(rawData) {
+  const parts = rawData.split(/^L\s*$/m);
+  const reorganized = [];
+  let currentEventData = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (!part) continue;
+    
+    const hasLocation = /^[A-Z\s-]+\s*\(\d{4

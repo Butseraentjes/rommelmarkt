@@ -1,5 +1,5 @@
 // =============================================================
-// Rommelmarkten.be – Main.js  (v2025-07-05 patch-6)
+// Rommelmarkten.be – Main.js  (v2025-07-05 patch-7)
 // =============================================================
 // Wijzigingen in deze patch
 // -------------------------------------------------------------
@@ -9,6 +9,9 @@
 //   zijn vervangen door de nieuwe namen.
 // • Extra null-checks zodat render() nooit crasht als element ontbreekt.
 // • loginModal blijft ongewijzigd.
+// • Form handling toegevoegd voor evenement toevoegen
+// • Auth state management verbeterd
+// • Image upload en preview functionaliteit
 // -------------------------------------------------------------
 
 import {
@@ -99,14 +102,173 @@ function listeners(){
   $['viewGrid']?.addEventListener('click',()=>switchView('grid'));
   $['viewList']?.addEventListener('click',()=>switchView('list'));
   $['loadMoreBtn']?.addEventListener('click',()=>{currentPage++;render();});
+  
+  // Voeg form handling toe
+  setupFormHandling();
+  
+  // Voeg suggest event button handling toe
+  $['suggestEvent']?.addEventListener('click', showLoginModal);
 }
 
 function showLoginModal(){currentUser?document.getElementById('toevoegen')?.scrollIntoView({behavior:'smooth'}):$['loginContainer']&&( $['loginContainer'].style.display='flex');}
 
 async function login(){if(!$['loginBtn'])return;try{$['loginBtn'].disabled=true;$['loginBtn'].textContent='⏳ Inloggen...';provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,provider);$['loginContainer'].style.display='none';}catch(e){alert('Kon niet inloggen');log(e);}finally{$['loginBtn'].disabled=false;$['loginBtn'].textContent='🔐 Inloggen met Google';}}
 
+// ──────────────────────────────────────────────────────────────
+// 📝 Form Handling
+// ──────────────────────────────────────────────────────────────
+function setupFormHandling() {
+  const form = $['marketForm'];
+  if (!form) return;
+  
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (!currentUser) {
+      showLoginModal();
+      return;
+    }
+    
+    try {
+      // Haal form data op
+      const naam = document.getElementById('market-name')?.value?.trim();
+      const type = document.getElementById('market-type')?.value;
+      const locatie = document.getElementById('market-location')?.value?.trim();
+      const organisator = document.getElementById('market-organizer')?.value?.trim();
+      const datum = document.getElementById('market-date')?.value;
+      const tijdStart = document.getElementById('market-time-start')?.value;
+      const tijdEind = document.getElementById('market-time-end')?.value;
+      const aantalStanden = document.getElementById('market-stands')?.value;
+      const standgeld = document.getElementById('market-price')?.value;
+      const contact = document.getElementById('market-contact')?.value?.trim();
+      const beschrijving = document.getElementById('market-description')?.value?.trim();
+      
+      // Validatie
+      if (!naam || !type || !locatie || !datum || !tijdStart) {
+        alert('Vul alle verplichte velden in');
+        return;
+      }
+      
+      // Maak start datum/tijd object
+      const startDateTime = new Date(`${datum}T${tijdStart}`);
+      if (isNaN(startDateTime.getTime())) {
+        alert('Ongeldige datum of tijd');
+        return;
+      }
+      
+      // Maak eind datum/tijd object als tijdEind is opgegeven
+      let endDateTime = null;
+      if (tijdEind) {
+        endDateTime = new Date(`${datum}T${tijdEind}`);
+        if (isNaN(endDateTime.getTime())) {
+          alert('Ongeldige eindtijd');
+          return;
+        }
+      }
+      
+      // Afbeelding verwerken
+      let imageUrl = '';
+      const imageFile = document.getElementById('market-image')?.files[0];
+      if (imageFile) {
+        try {
+          imageUrl = await convertImageToBase64(imageFile);
+        } catch (e) {
+          console.error('Error converting image:', e);
+        }
+      }
+      
+      // Event object maken
+      const eventData = {
+        naam,
+        type,
+        locatie,
+        datumStart: Timestamp.fromDate(startDateTime),
+        toegevoegdOp: Timestamp.now(),
+        toegevoegdDoor: currentUser.email,
+        status: 'actief'
+      };
+      
+      // Optionele velden toevoegen
+      if (organisator) eventData.organisator = organisator;
+      if (endDateTime) eventData.datumEind = Timestamp.fromDate(endDateTime);
+      if (aantalStanden) eventData.aantalStanden = parseInt(aantalStanden);
+      if (standgeld) eventData.standgeld = parseFloat(standgeld);
+      if (contact) eventData.contact = contact;
+      if (beschrijving) eventData.beschrijving = beschrijving;
+      if (imageUrl) eventData.imageUrl = imageUrl;
+      
+      // Opslaan in Firestore
+      await addDoc(collection(db, COLLECTION), eventData);
+      
+      // Success feedback
+      toast('Evenement succesvol toegevoegd!');
+      form.reset();
+      
+      // Verberg image preview
+      const imagePreview = document.getElementById('image-preview');
+      if (imagePreview) imagePreview.style.display = 'none';
+      
+      // Herlaad data
+      await loadPrivate();
+      
+      // Scroll naar markten sectie
+      document.getElementById('markten')?.scrollIntoView({ behavior: 'smooth' });
+      
+    } catch (error) {
+      console.error('Error adding event:', error);
+      toast('Er ging iets mis bij het toevoegen van het evenement');
+    }
+  });
+  
+  // Image preview handling
+  const imageInput = document.getElementById('market-image');
+  const imagePreview = document.getElementById('image-preview');
+  const previewImg = document.getElementById('preview-img');
+  
+  if (imageInput && imagePreview && previewImg) {
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          previewImg.src = e.target.result;
+          imagePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+}
+
+// Functie voor het verwijderen van images
+function removeImage() {
+  const imageInput = document.getElementById('market-image');
+  const imagePreview = document.getElementById('image-preview');
+  
+  if (imageInput) imageInput.value = '';
+  if (imagePreview) imagePreview.style.display = 'none';
+}
+
+// Maak removeImage globaal beschikbaar
+window.removeImage = removeImage;
+
 // Auth-observer
-onAuthStateChanged(auth,u=>{currentUser=u;isAdmin=!!u&&adminEmails.includes(u.email);$['userMenu'] && ($['userMenu'].style.display=u?'flex':'none');document.querySelectorAll('.nav-login-btn,.show-login').forEach(b=>b.style.display=u?'none':'');$['userEmail'] && ($['userEmail'].textContent=u?u.email:'');$['adminPanel'] && ($['adminPanel'].style.display=isAdmin?'block':'none');u?loadPrivate():(!allMarkets.length&&loadPublic());});
+onAuthStateChanged(auth,u=>{
+  currentUser=u;
+  isAdmin=!!u&&adminEmails.includes(u.email);
+  $['userMenu'] && ($['userMenu'].style.display=u?'flex':'none');
+  document.querySelectorAll('.nav-login-btn,.show-login').forEach(b=>b.style.display=u?'none':'');
+  $['userEmail'] && ($['userEmail'].textContent=u?u.email:'');
+  $['adminPanel'] && ($['adminPanel'].style.display=isAdmin?'block':'none');
+  
+  // Toon/verberg de "evenement toevoegen" sectie
+  const addSection = document.getElementById('toevoegen');
+  if (addSection) {
+    addSection.style.display = u ? 'block' : 'none';
+  }
+  
+  u?loadPrivate():(!allMarkets.length&&loadPublic());
+});
 
 // ──────────────────────────────────────────────────────────────
 // 📥 Data-load

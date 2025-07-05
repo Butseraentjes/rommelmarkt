@@ -26,6 +26,7 @@ const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const loginContainer = document.getElementById('login-container');
 const mainContent = document.getElementById('main-content');
+const userBar = document.getElementById('user-bar');
 const userEmail = document.getElementById('user-email');
 const marketForm = document.getElementById('market-form');
 const marketsContainer = document.getElementById('markets-container');
@@ -152,21 +153,39 @@ async function handleLogout() {
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
   if (user) {
+    // User is logged in
     loginContainer.style.display = 'none';
     mainContent.style.display = 'block';
+    if (userBar) userBar.style.display = 'block';
     userEmail.textContent = user.email;
     
     // Check if user is admin
     isAdmin = adminEmails.includes(user.email);
     if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
     
+    // Show all sections for logged in users
+    const toevoegenSection = document.getElementById('toevoegen');
+    if (toevoegenSection) toevoegenSection.style.display = 'block';
+    
     loadMarkets();
   } else {
+    // User is logged out
     loginContainer.style.display = 'flex';
-    mainContent.style.display = 'none';
-    if (adminPanel) adminPanel.style.display = 'none';
+    mainContent.style.display = 'block'; // Still show main content
+    if (userBar) userBar.style.display = 'none'; // Hide user bar
+    
+    // Hide admin and add sections for logged out users
+    const toevoegenSection = document.getElementById('toevoegen');
+    const adminSection = document.getElementById('admin-panel');
+    
+    if (toevoegenSection) toevoegenSection.style.display = 'none';
+    if (adminSection) adminSection.style.display = 'none';
+    
     currentUser = null;
     isAdmin = false;
+    
+    // Load markets for public viewing
+    loadMarketsPublic();
   }
 });
 
@@ -275,6 +294,56 @@ function prepareMarketData(formData) {
   };
 }
 
+// Load markets for public viewing (when not logged in)
+async function loadMarketsPublic() {
+  try {
+    showLoadingState();
+    
+    let q;
+    try {
+      q = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('datumStart', 'asc')
+      );
+    } catch (indexError) {
+      q = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('toegevoegdOp', 'desc')
+      );
+    }
+    
+    const querySnapshot = await getDocs(q);
+    allMarkets = [];
+
+    querySnapshot.forEach((doc) => {
+      const market = { id: doc.id, ...doc.data() };
+      
+      // Voor publieke weergave: toon alle actieve markten (ook verleden)
+      const isActive = !market.status || market.status === 'actief';
+      
+      if (isActive) {
+        allMarkets.push(market);
+      }
+    });
+
+    // Sorteer op datum (meest recente eerst voor debug)
+    allMarkets.sort((a, b) => b.datumStart.toDate() - a.datumStart.toDate());
+
+    currentPage = 1;
+    applyFilters();
+    updateStats();
+
+    console.log('Publieke markten geladen:', allMarkets.length);
+    allMarkets.forEach(market => {
+      console.log('Markt:', market.naam, 'Datum:', market.datumStart.toDate());
+    });
+
+  } catch (error) {
+    console.error('Fout bij laden publieke evenementen:', error);
+    showErrorState();
+  }
+}
+
 // Load and display markets
 async function loadMarkets() {
   try {
@@ -301,18 +370,42 @@ async function loadMarkets() {
     querySnapshot.forEach((doc) => {
       const market = { id: doc.id, ...doc.data() };
       
+      // Voor ingelogde gebruikers: meer permissieve filtering voor debugging
       const now = new Date();
       const marketDate = market.datumStart.toDate();
       const isActive = !market.status || market.status === 'actief';
       
-      if (marketDate > now && isActive) {
+      // Tijdelijk: toon ook markten van de laatste 30 dagen voor debugging
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      if (isActive && marketDate > thirtyDaysAgo) {
         allMarkets.push(market);
       }
+    });
+
+    // Sorteer op datum (toekomstige eerst, dan verleden)
+    allMarkets.sort((a, b) => {
+      const dateA = a.datumStart.toDate();
+      const dateB = b.datumStart.toDate();
+      const now = new Date();
+      
+      // Toekomstige events eerst, dan gesorteerd op datum
+      if (dateA > now && dateB < now) return -1;
+      if (dateA < now && dateB > now) return 1;
+      
+      return dateA - dateB;
     });
 
     currentPage = 1;
     applyFilters();
     updateStats();
+
+    // Debug logging
+    console.log('Ingelogde gebruiker - markten geladen:', allMarkets.length);
+    allMarkets.forEach(market => {
+      const isFuture = market.datumStart.toDate() > new Date() ? '(TOEKOMST)' : '(VERLEDEN)';
+      console.log('Markt:', market.naam, 'Datum:', market.datumStart.toDate(), isFuture);
+    });
 
   } catch (error) {
     console.error('Fout bij laden evenementen:', error);

@@ -3,38 +3,221 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rommelmarkt in je buurt</title>
+  <title>Rommelmarkt in je buurt - Vind de beste rommelmarkten</title>
+  <meta name="description" content="Ontdek rommelmarkten, kermissen en feesten in je buurt. Voeg je eigen evenementen toe en deel ze met anderen.">
   <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h1>Welkom bij Rommelmarkt in je buurt</h1>
-  
-  <div id="login-container">
-    <button id="login-btn">Login met Google</button>
-  </div>
-  
-  <div id="main-content" style="display: none;">
-    <div id="user-info">
-      <p id="user-email"></p>
-      <button id="logout-btn">Uitloggen</button>
+  <!-- Header -->
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <span class="logo-icon">🏪</span>
+        <span class="logo-text">Rommelmarkten.be</span>
+      </div>
+      <nav class="nav">
+        <a href="#markten" class="nav-link">Markten</a>
+        <a href="#toevoegen" class="nav-link">Toevoegen</a>
+        <a href="#contact" class="nav-link">Contact</a>
+      </nav>
     </div>
-    
-    <form id="market-form">
-      <h3>Rommelmarkt toevoegen</h3>
-      <input type="text" id="market-name" placeholder="Naam van de rommelmarkt" required>
-      <input type="text" id="market-location" placeholder="Locatie (straat, stad)" required>
-      <input type="date" id="market-date" required>
-      <input type="time" id="market-time" required>
-      <textarea id="market-description" placeholder="Beschrijving (optioneel)"></textarea>
-      <button type="submit">Rommelmarkt toevoegen</button>
-    </form>
-    
-    <div id="markets-list">
-      <h3>Rommelmarkten in de buurt</h3>
-      <div id="markets-container"></div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Ontdek rommelmarkten in je buurt</h1>
+      <p class="hero-subtitle">Vind de beste kansen voor unieke vondsten en gezellige markten</p>
+      <div class="hero-stats">
+        <div class="stat">
+          <span class="stat-number" id="total-markets">0</span>
+          <span class="stat-label">Markten deze maand</span>
+        </div>
+        <div class="stat">
+          <span class="stat-number" id="upcoming-markets">0</span>
+          <span class="stat-label">Komende week</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Login Section -->
+  <div id="login-container" class="login-section">
+    <div class="login-card">
+      <h2>Welkom terug!</h2>
+      <p>Log in om markten toe te voegen en te beheren</p>
+      <button id="login-btn" class="btn btn-primary">
+        <span class="btn-icon">🔐</span>
+        Inloggen met Google
+      </button>
     </div>
   </div>
-  
+
+  <!-- Main Content -->
+  <main id="main-content" style="display: none;">
+    
+    <!-- User Bar -->
+    <div class="user-bar">
+      <div class="container">
+        <div class="user-info">
+          <span id="user-email" class="user-email"></span>
+          <span class="user-badge">Organisator</span>
+        </div>
+        <button id="logout-btn" class="btn btn-secondary btn-small">Uitloggen</button>
+      </div>
+    </div>
+
+    <!-- Add Market Section -->
+    <section id="toevoegen" class="add-market-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Rommelmarkt toevoegen</h2>
+          <p>Deel je evenement met anderen in de buurt</p>
+        </div>
+        
+        <form id="market-form" class="market-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="market-name">Naam evenement *</label>
+              <input type="text" id="market-name" placeholder="bijv. Grote rommelmarkt Sint-Pieters" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="market-type">Type evenement *</label>
+              <select id="market-type" required>
+                <option value="">Selecteer type</option>
+                <option value="rommelmarkt">Rommelmarkt</option>
+                <option value="garageverkoop">Garageverkoop</option>
+                <option value="braderie">Braderie</option>
+                <option value="kermis">Kermis</option>
+                <option value="boerenmarkt">Boerenmarkt</option>
+                <option value="antiekmarkt">Antiekmarkt</option>
+                <option value="feest">Dorps-/stadsfeest</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="market-location">Locatie *</label>
+              <input type="text" id="market-location" placeholder="Straat, nummer, postcode stad" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="market-organizer">Organisator</label>
+              <input type="text" id="market-organizer" placeholder="bijv. Wijkcomité, Gemeente">
+            </div>
+            
+            <div class="form-group">
+              <label for="market-date">Datum *</label>
+              <input type="date" id="market-date" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="market-time-start">Starttijd *</label>
+              <input type="time" id="market-time-start" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="market-time-end">Eindtijd</label>
+              <input type="time" id="market-time-end">
+            </div>
+            
+            <div class="form-group">
+              <label for="market-stands">Aantal standjes</label>
+              <input type="number" id="market-stands" min="1" max="1000" placeholder="bijv. 50">
+            </div>
+            
+            <div class="form-group">
+              <label for="market-price">Standgeld per meter</label>
+              <input type="number" id="market-price" step="0.50" min="0" placeholder="bijv. 2.50">
+            </div>
+            
+            <div class="form-group">
+              <label for="market-contact">Contact (telefoon/email)</label>
+              <input type="text" id="market-contact" placeholder="bijv. 09 123 45 67 of info@voorbeeld.be">
+            </div>
+          </div>
+          
+          <div class="form-group full-width">
+            <label for="market-description">Beschrijving</label>
+            <textarea id="market-description" rows="4" placeholder="Extra informatie over het evenement, parkeerinfo, specialiteiten..."></textarea>
+          </div>
+          
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-large">
+              <span class="btn-icon">➕</span>
+              Evenement toevoegen
+            </button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Markets List Section -->
+    <section id="markten" class="markets-section">
+      <div class="container">
+        <div class="section-header">
+          <h2>Komende evenementen</h2>
+          <div class="filters">
+            <select id="filter-type" class="filter-select">
+              <option value="">Alle types</option>
+              <option value="rommelmarkt">Rommelmarkten</option>
+              <option value="garageverkoop">Garageverkopen</option>
+              <option value="braderie">Braderieën</option>
+              <option value="kermis">Kermissen</option>
+              <option value="boerenmarkt">Boerenmarkten</option>
+              <option value="antiekmarkt">Antiekmarkten</option>
+              <option value="feest">Feesten</option>
+            </select>
+            <input type="text" id="filter-location" placeholder="Zoek op locatie..." class="filter-input">
+          </div>
+        </div>
+        
+        <div id="markets-container" class="markets-grid">
+          <!-- Markets will be loaded here -->
+        </div>
+        
+        <div id="no-markets" class="no-markets" style="display: none;">
+          <div class="no-markets-icon">📅</div>
+          <h3>Geen evenementen gevonden</h3>
+          <p>Er zijn momenteel geen evenementen die voldoen aan je zoekcriteria.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-section">
+          <div class="logo">
+            <span class="logo-icon">🏪</span>
+            <span class="logo-text">Rommelmarkten.be</span>
+          </div>
+          <p>Ontdek de beste rommelmarkten en evenementen in je buurt.</p>
+        </div>
+        <div class="footer-section">
+          <h4>Links</h4>
+          <ul>
+            <li><a href="#markten">Markten</a></li>
+            <li><a href="#toevoegen">Evenement toevoegen</a></li>
+            <li><a href="#contact">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-section">
+          <h4>Contact</h4>
+          <p>Vragen of suggesties?<br>Stuur ons een berichtje!</p>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2025 Rommelmarkten.be - Gemaakt met ❤️ voor de community</p>
+      </div>
+    </div>
+  </footer>
+
   <script type="module" src="main.js"></script>
 </body>
 </html>

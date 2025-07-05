@@ -73,6 +73,12 @@ export const formatDateTime = (timestamp) => {
   };
 };
 
+// 👑 Admin gebruikers (voeg hier je eigen email toe)
+export const adminEmails = [
+  'jouw-email@gmail.com', // Vervang dit met je eigen email
+  // Voeg hier andere admin emails toe
+];
+
 // 🎯 Type mappings en iconen
 export const eventTypes = {
   rommelmarkt: { 

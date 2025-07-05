@@ -1,87 +1,4 @@
-function createGridView(market, eventType, dateTime, endTime) {
-  const hasImage = market.imageUrl && market.imageUrl !== '';
-  
-  return `
-    <div class="market-date-badge">
-      ${dateTime.dayMonth}
-    </div>
-    
-    ${isAdmin ? `
-      <div class="market-admin-controls">
-        <button onclick="deleteMarket('${market.id}')" class="btn-delete-market" title="Verwijder markt">
-          🗑️
-        </button>
-      </div>
-    ` : ''}
-    
-    ${hasImage ? `
-      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
-    ` : `
-      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 3rem;">
-        ${eventType.icon}
-      </div>
-    `}
-    
-    <div class="market-card-content">
-      <div class="market-type-badge ${eventType.color}">
-        ${eventType.icon} ${eventType.label}
-      </div>
-      
-      <h3>${escapeHtml(market.naam)}</h3>
-      
-      <div class="market-date-time">
-        📅 ${dateTime.dayName}
-        <br>
-        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
-      </div>
-      
-      <div class="market-details-grid">
-        <div class="market-detail">
-          <span class="market-detail-icon">📍</span>
-          <span>${escapeHtml(market.locatie)}</span>
-        </div>
-        
-        ${market.organisator ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">👥</span>
-            <span>${escapeHtml(market.organisator)}</span>
-          </div>
-        ` : ''}
-        
-        ${market.aantalStanden ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">🏪</span>
-            <span>${market.aantalStanden} standjes</span>
-          </div>
-        ` : ''}
-        
-        ${market.standgeld ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">💰</span>
-            <span>€${market.standgeld.toFixed(2)} per meter</span>
-          </div>
-        ` : ''}
-        
-        ${market.contact ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">📞</span>
-            <span>${escapeHtml(market.contact)}</span>
-          </div>
-        ` : ''}
-      </div>
-      
-      ${market.beschrijving ? `
-        <div class="market-description">
-          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
-        </div>
-      ` : ''}
-    </div>
-    
-    <div class="market-footer">
-      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
-    </div>
-  `;
-}import { 
+import { 
   auth, 
   provider, 
   db, 
@@ -104,7 +21,7 @@ function createGridView(market, eventType, dateTime, endTime) {
   doc
 } from './firebase.js';
 
-// DOM elementen
+// DOM elementen - ALLE IN ÉÉN KEER
 const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const loginContainer = document.getElementById('login-container');
@@ -131,21 +48,6 @@ const upcomingMarketsSpan = document.getElementById('upcoming-markets');
 const marketImageInput = document.getElementById('market-image');
 const imagePreview = document.getElementById('image-preview');
 const previewImg = document.getElementById('preview-img');
-const marketsContainer = document.getElementById('markets-container');
-const noMarketsDiv = document.getElementById('no-markets');
-const filterType = document.getElementById('filter-type');
-const filterLocation = document.getElementById('filter-location');
-const filterDate = document.getElementById('filter-date');
-const clearFiltersBtn = document.getElementById('clear-filters');
-const viewGridBtn = document.getElementById('view-grid');
-const viewListBtn = document.getElementById('view-list');
-const resultsCount = document.getElementById('results-count');
-const loadingMarketsDiv = document.getElementById('loading-markets');
-const loadMoreBtn = document.getElementById('load-more-btn');
-const loadMoreContainer = document.getElementById('load-more-container');
-const suggestEventBtn = document.getElementById('suggest-event');
-const totalMarketsSpan = document.getElementById('total-markets');
-const upcomingMarketsSpan = document.getElementById('upcoming-markets');
 
 // Admin elements
 const adminPanel = document.getElementById('admin-panel');
@@ -317,7 +219,7 @@ async function handleAddMarket(e) {
       return;
     }
 
-    const marketData = prepareMarketData(formData);
+    const marketData = await prepareMarketData(formData);
     await addDoc(collection(db, 'rommelmarkten'), marketData);
     
     showSuccessMessage('Geweldig evenement toegevoegd! 🎉');
@@ -535,10 +437,6 @@ async function loadMarkets() {
 
     // Debug logging
     console.log('Ingelogde gebruiker - markten geladen (na duplicate filtering):', allMarkets.length);
-    allMarkets.forEach(market => {
-      const isFuture = market.datumStart.toDate() > new Date() ? '(TOEKOMST)' : '(VERLEDEN)';
-      console.log('Markt:', market.naam, 'Datum:', market.datumStart.toDate(), isFuture);
-    });
 
   } catch (error) {
     console.error('Fout bij laden evenementen:', error);
@@ -568,6 +466,7 @@ async function loadMarkets() {
       currentPage = 1;
       applyFilters();
       updateStats();
+      loadHeroMarkets();
       
     } catch (backupError) {
       console.error('Ook backup query mislukt:', backupError);
@@ -712,13 +611,11 @@ function createMarketCard(market) {
 }
 
 function createGridView(market, eventType, dateTime, endTime) {
+  const hasImage = market.imageUrl && market.imageUrl !== '';
+  
   return `
     <div class="market-date-badge">
       ${dateTime.dayMonth}
-    </div>
-    
-    <div class="market-type-badge ${eventType.color}">
-      ${eventType.icon} ${eventType.label}
     </div>
     
     ${isAdmin ? `
@@ -729,7 +626,19 @@ function createGridView(market, eventType, dateTime, endTime) {
       </div>
     ` : ''}
     
+    ${hasImage ? `
+      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
+    ` : `
+      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 3rem;">
+        ${eventType.icon}
+      </div>
+    `}
+    
     <div class="market-card-content">
+      <div class="market-type-badge ${eventType.color}">
+        ${eventType.icon} ${eventType.label}
+      </div>
+      
       <h3>${escapeHtml(market.naam)}</h3>
       
       <div class="market-date-time">
@@ -764,6 +673,13 @@ function createGridView(market, eventType, dateTime, endTime) {
             <span>€${market.standgeld.toFixed(2)} per meter</span>
           </div>
         ` : ''}
+        
+        ${market.contact ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">📞</span>
+            <span>${escapeHtml(market.contact)}</span>
+          </div>
+        ` : ''}
       </div>
       
       ${market.beschrijving ? `
@@ -771,18 +687,10 @@ function createGridView(market, eventType, dateTime, endTime) {
           ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
         </div>
       ` : ''}
-      
-      ${market.contact ? `
-        <div class="market-detail">
-          <span class="market-detail-icon">📞</span>
-          <span>${escapeHtml(market.contact)}</span>
-        </div>
-      ` : ''}
     </div>
     
-    <div class="market-added-by">
-      Toegevoegd op ${formatDate(market.toegevoegdOp)}
-      ${isAdmin ? ` (ID: ${market.id.substring(0, 8)}...)` : ''}
+    <div class="market-footer">
+      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
     </div>
   `;
 }
@@ -1420,4 +1328,9 @@ async function deleteMarket(marketId) {
 // Make deleteMarket globally accessible for onclick handlers
 if (typeof window !== 'undefined') {
   window.deleteMarket = deleteMarket;
+}
+
+// Make removeImage globally accessible
+if (typeof window !== 'undefined') {
+  window.removeImage = removeImage;
 }

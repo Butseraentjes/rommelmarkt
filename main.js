@@ -623,28 +623,139 @@ async function handleBulkImport(e) {
 function parseRommelmarktData(rawData) {
   const markets = [];
   
-  // Split data into lines and process
-  const lines = rawData.split('\n').filter(line => line.trim());
+  // Split data into blocks separated by 'L' markers
+  const blocks = rawData.split(/^L\s*$/m).filter(block => block.trim());
   
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // Skip empty lines and headers
-    if (!line || line.includes('Rommelmarkten') || line.includes('Toggle navigation')) {
-      continue;
-    }
-    
+  for (const block of blocks) {
     try {
-      const market = parseMarketLine(line);
+      const market = parseMarketBlock(block);
       if (market) {
         markets.push(market);
       }
     } catch (error) {
-      console.warn('Kon regel niet verwerken:', line, error);
+      console.warn('Kon blok niet verwerken:', error);
     }
   }
   
   return markets;
+}
+
+function parseMarketBlock(block) {
+  const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+  
+  if (lines.length < 3) return null;
+  
+  let plaats = '';
+  let postcode = '';
+  let adres = '';
+  let naam = '';
+  let datum = null;
+  let startTijd = '09:00';
+  let eindTijd = null;
+  let beschrijving = '';
+  let organisator = '';
+  let contact = '';
+  let standgeld = null;
+  let type = 'rommelmarkt';
+  
+  // Parse eerste regel voor plaats en postcode
+  const firstLine = lines[0];
+  const plaatsMatch = firstLine.match(/^([A-Z\s-]+(?:\s*-\s*[A-Z\s]+)?)\s*\((\d{4})\)\s*(.*)$/);
+  if (plaatsMatch) {
+    plaats = plaatsMatch[1].trim();
+    postcode = plaatsMatch[2];
+    adres = plaatsMatch[3].trim();
+  }
+  
+  // Zoek naar datum/tijd lijnen
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Zoek datum (za 5 jul 2025)
+    const datumMatch = line.match(/^(ma|di|wo|do|vr|za|zo)\s+(\d{1,2})\s+(\w+)\s+(\d{4})$/i);
+    if (datumMatch) {
+      const [, , dag, maand, jaar] = datumMatch;
+      datum = parseDutchDate(`${dag} ${maand} ${jaar}`);
+      
+      // Kijk naar volgende regel voor tijd
+      if (i + 1 < lines.length) {
+        const tijdMatch = lines[i + 1].match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+        if (tijdMatch) {
+          const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
+          startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
+          eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
+        }
+      }
+    }
+    
+    // Zoek organisator info
+    if (line.includes('@') || line.includes('tel') || line.includes('+32')) {
+      if (line.includes('-') && !contact) {
+        const parts = line.split('-');
+        if (parts.length >= 2) {
+          organisator = parts[0].trim();
+          contact = parts.slice(1).join('-').trim();
+        }
+      }
+    }
+    
+    // Zoek standgeld
+    const standgeldMatch = line.match(/standplaats\s*([\d,]+)\s*€/i);
+    if (standgeldMatch) {
+      standgeld = parseFloat(standgeldMatch[1].replace(',', '.'));
+    }
+    
+    // Bepaal naam en type
+    if (line.length > 20 && line.length < 100 && !line.includes('@') && !line.includes('http') && !line.includes('tel')) {
+      if (line.toLowerCase().includes('rommelmarkt') || 
+          line.toLowerCase().includes('markt') || 
+          line.toLowerCase().includes('feest')) {
+        naam = line;
+      }
+    }
+    
+    // Bepaal type
+    if (line.toLowerCase().includes('garage')) type = 'garageverkoop';
+    if (line.toLowerCase().includes('braderie')) type = 'braderie';
+    if (line.toLowerCase().includes('kermis')) type = 'kermis';
+    if (line.toLowerCase().includes('antiek')) type = 'antiekmarkt';
+    if (line.toLowerCase().includes('brocante')) type = 'antiekmarkt';
+    if (line.toLowerCase().includes('feest')) type = 'feest';
+  }
+  
+  // Fallback voor naam
+  if (!naam) {
+    naam = `Rommelmarkt ${plaats}`;
+  }
+  
+  // Maak beschrijving
+  beschrijving = lines.slice(2, Math.min(8, lines.length))
+    .filter(line => !line.includes('@') && !line.includes('http') && line.length > 10)
+    .join(' ')
+    .substring(0, 200);
+  
+  if (!plaats || !datum) {
+    console.log('Onvoldoende data voor:', plaats, datum);
+    return null;
+  }
+  
+  const locatie = adres ? `${adres}, ${postcode} ${plaats}` : `${postcode} ${plaats}`;
+  
+  const startDateTime = new Date(`${datum}T${startTijd}`);
+  const endDateTime = eindTijd ? new Date(`${datum}T${eindTijd}`) : null;
+  
+  return {
+    naam: naam.substring(0, 100),
+    type: type,
+    locatie: locatie,
+    datumStart: Timestamp.fromDate(startDateTime),
+    datumEind: endDateTime ? Timestamp.fromDate(endDateTime) : null,
+    beschrijving: beschrijving,
+    organisator: organisator.substring(0, 100),
+    contact: contact.substring(0, 100),
+    aantalStanden: null,
+    standgeld: standgeld
+  };
 }
 
 function parseMarketLine(line) {
@@ -750,12 +861,12 @@ function parseDutchDate(dateStr) {
     'januari': '01', 'februari': '02', 'maart': '03', 'april': '04',
     'mei': '05', 'juni': '06', 'juli': '07', 'augustus': '08',
     'september': '09', 'oktober': '10', 'november': '11', 'december': '12',
-    'jan': '01', 'feb': '02', 'mrt': '03', 'apr': '04',
+    'jan': '01', 'feb': '02', 'mrt': '03', 'apr': '04', 'mei': '05',
     'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09',
     'okt': '10', 'nov': '11', 'dec': '12'
   };
   
-  // Pattern: "6 juli 2025" of "12 juli 2025"
+  // Pattern: "6 juli 2025" of "12 jul 2025"
   const match = dateStr.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
   if (match) {
     const [, dag, maand, jaar] = match;

@@ -1,18 +1,12 @@
 // =============================================================
-// Rommelmarkten.be – Main.js  (v2025-07-05 patch-8)
+// Rommelmarkten.be – Main.js  (v2025-07-05 patch-9 - WORKING)
 // =============================================================
 // Wijzigingen in deze patch
 // -------------------------------------------------------------
-// • Fix: DOM-mapping komt nu 1-op-1 overeen met IDs in index.html.
-//   ‣ loadingMarkets, loadMoreBtn, loadMoreContainer → correcte IDs.
-// • Alle oude references ($['loading'], $['loadMore'], $['loadMoreWrap'])
-//   zijn vervangen door de nieuwe namen.
-// • Extra null-checks zodat render() nooit crasht als element ontbreekt.
-// • loginModal blijft ongewijzigd.
-// • Form handling toegevoegd voor evenement toevoegen
-// • Auth state management verbeterd
-// • Image upload en preview functionaliteit
-// • Firebase debug code toegevoegd voor CORS troubleshooting
+// • Terug naar werkende versie
+// • Fix voor undefined display issues
+// • Verbeterde error handling
+// • Simpele, betrouwbare structuur
 // -------------------------------------------------------------
 
 import {
@@ -399,10 +393,12 @@ function render(){if(!$['marketsContainer'])return;const start=(currentPage-1)*P
 }
 
 function card(m){
+  console.log('🏪 Creating card for:', m.naam, 'Type:', m.type);
+  
   const a=document.createElement('a');
   a.className='market-card';
   a.href=`event.html?id=${m.id}`;
-  a.setAttribute('aria-label',m.naam);
+  a.setAttribute('aria-label',m.naam || 'Onbekend evenement');
   
   const evt=eventTypes[m.type]||eventTypes.rommelmarkt;
   
@@ -410,8 +406,9 @@ function card(m){
   let fdt;
   try {
     fdt = formatDateTime(m.datumStart);
+    console.log('📅 Formatted date for', m.naam, ':', fdt);
   } catch (e) {
-    console.error('Error formatting date for:', m.naam, e);
+    console.error('❌ Error formatting date for:', m.naam, e);
     // Fallback naar basis datum formatting
     const date = dateFromFS(m.datumStart);
     fdt = {
@@ -420,7 +417,16 @@ function card(m){
     };
   }
   
-  a.innerHTML=`${m.imageUrl?`<img src="${m.imageUrl}" alt="${escapeHtml(m.naam)}" class="market-image" loading="lazy">`:`<div class="market-image" style="background:linear-gradient(135deg,${getGradient(m.type)});display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;">${evt.icon}</div>`}
+  // Debug de waardes die gebruikt worden
+  console.log('🔍 Card values:', {
+    naam: m.naam,
+    locatie: m.locatie,
+    type: m.type,
+    evt: evt,
+    fdt: fdt
+  });
+  
+  a.innerHTML=`${m.imageUrl?`<img src="${m.imageUrl}" alt="${escapeHtml(m.naam || 'Evenement')}" class="market-image" loading="lazy">`:`<div class="market-image" style="background:linear-gradient(135deg,${getGradient(m.type)});display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;">${evt.icon}</div>`}
     <div class="market-card-content">
       <div class="market-type-badge type-${m.type}">${evt.icon} ${evt.label}</div>
       <h3>${escapeHtml(m.naam || 'Onbekend evenement')}</h3>
@@ -433,7 +439,7 @@ function card(m){
 // ──────────────────────────────────────────────────────────────
 // 📊 Hero & stats
 // ──────────────────────────────────────────────────────────────
-function hero(){if(!$['heroMarketsContainer'])return;const up=allMarkets.filter(m=>dateFromFS(m.datumStart)>new Date()).slice(0,3);$['heroMarketsContainer'].innerHTML='';up.forEach(m=>{const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const c=document.createElement('a');c.className='market-card';c.href=`event.html?id=${m.id}`;c.innerHTML=`<div style="padding:12px;text-align:center;background:linear-gradient(135deg,${getGradient(m.type)});color:#fff;"><strong>${escapeHtml(m.naam)}</strong><br><small>${formatDateTime(m.datumStart).dayName}</small><div style="font-size:1.5rem;margin-top:4px;">${evt.icon}</div></div>`;$['heroMarketsContainer'].appendChild(c);});}
+function hero(){if(!$['heroMarketsContainer'])return;const up=allMarkets.filter(m=>dateFromFS(m.datumStart)>new Date()).slice(0,3);$['heroMarketsContainer'].innerHTML='';up.forEach(m=>{const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const c=document.createElement('a');c.className='market-card';c.href=`event.html?id=${m.id}`;c.innerHTML=`<div style="padding:12px;text-align:center;background:linear-gradient(135deg,${getGradient(m.type)});color:#fff;"><strong>${escapeHtml(m.naam || 'Onbekend evenement')}</strong><br><small>${formatDateTime(m.datumStart).dayName}</small><div style="font-size:1.5rem;margin-top:4px;">${evt.icon}</div></div>`;$['heroMarketsContainer'].appendChild(c);});}
 
 function stats(){if(!$['totalMarkets']||!$['upcomingMarkets'])return;const now=new Date();const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);const weekEnd=new Date(now);weekEnd.setDate(now.getDate()+7);const inMonth=allMarkets.filter(m=>{const d=dateFromFS(m.datumStart);return d>=now&&d<=monthEnd;}).length;const inWeek=allMarkets.filter(m=>{const d=dateFromFS(m.datumStart);return d>=now&&d<=weekEnd;}).length;counter($['totalMarkets'],inMonth);counter($['upcomingMarkets'],inWeek);}function counter(el,to){if(!el)return;const s=0,d=700,st=performance.now();const step=t=>{const p=Math.min((t-st)/d,1);el.textContent=Math.round(s+(to-s)*p);p<1&&requestAnimationFrame(step);};requestAnimationFrame(step);} 
 

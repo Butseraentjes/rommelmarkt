@@ -1,15 +1,12 @@
 // =============================================================
-// Rommelmarkt in je buurt – Main.js  (v2025‑07‑05 patch‑2)
+// Rommelmarkt in je buurt – Main.js  (v2025-07-05 patch-3)
 // =============================================================
 // Wijzigingen in deze patch
 // -------------------------------------------------------------
-// • Fix "handleAddMarket is not defined"  →  stub toegevoegd (volledige
-//   implementatie volgt in aparte module, maar verwijzing breekt nu niet)
-// • Fix "timestamp.toDate is not a function"  →  overal waar we de helper
-//   formatDate()/formatDateTime() aanroepen, geven we weer het **Firestore
-//   Timestamp‑object** door (dus zonder vooraf .toDate()).
-// • Klein hulphandlers‑stub voor handleImageUpload zodat event‑listener
-//   niet crasht.
+// • Syntax-error gefixt (afgebroken regel aan einde van renderMarkets()).
+// • Kleine hulpfuncties bijgevoegd (createMarketCard, switchView, loadHeroMarkets)
+//   zodat de app opnieuw compileert en ten minste een basis-weergave toont.
+// • Login-flow onveranderd; indien er verder nog fouten opduiken, laat het weten.
 // -------------------------------------------------------------
 
 import {
@@ -80,19 +77,19 @@ function showLoginInterface(){currentUser?document.getElementById('toevoegen')?.
 async function handleLogin(){if(!loginBtn)return;try{loginBtn.disabled=true;loginBtn.textContent='⏳ Inloggen...';provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,provider);}catch(e){alert('Kon niet inloggen');log(e);}finally{loginBtn.disabled=false;loginBtn.textContent='🔐 Inloggen met Google';loginContainer&&(loginContainer.style.display='none');}}
 
 // ──────────────────────────────────────────────────────────────
-// 🆕 Stubs (worden later volledig uitgewerkt zodat listeners niet crashen)
+// 🆕 Stubs
 // ──────────────────────────────────────────────────────────────
 function handleAddMarket(e){e.preventDefault();alert('Evenement toevoegen is binnenkort beschikbaar.');}
-function handleImageUpload(){/* TODO: image preview */}
+function handleImageUpload(){/* todo */}
 
 onAuthStateChanged(auth,u=>{currentUser=u;isAdmin=!!u&&adminEmails.includes(u.email);userMenu&&(userMenu.style.display=u?'flex':'none');document.querySelectorAll('.nav-login-btn,.show-login').forEach(b=>b.style.display=u?'none':'');userEmail&&(userEmail.textContent=u?.email||'');adminPanel&&(adminPanel.style.display=isAdmin?'block':'none');u?loadMarkets():(!hasInitializedMarkets&&loadMarketsPublic());});
 
 // ──────────────────────────────────────────────────────────────
-// 🗄️ Load markets (public/auth) – met index fallback
+// 🗄️ Data-loaders
 // ──────────────────────────────────────────────────────────────
 async function loadMarketsPublic(){hasInitializedMarkets=true;await genericLoadMarkets(true);}async function loadMarkets(){hasInitializedMarkets=true;await genericLoadMarkets(false);} 
 
-async function genericLoadMarkets(isPublic){try{showLoadingState();const base=[collection(db,MARKET_COLLECTION)];const q=query(...base,orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){log('⚠️ Index ontbreekt – fallback op toegevoegdOp');const q2=query(collection(db,MARKET_COLLECTION),orderBy('toegevoegdOp','desc'));await fetchAndProcess(q2);}else{log(e);showErrorState();}}}
+async function genericLoadMarkets(isPublic){try{showLoadingState();const q=query(collection(db,MARKET_COLLECTION),orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){log('⚠️ Index ontbreekt – fallback op toegevoegdOp');const q2=query(collection(db,MARKET_COLLECTION),orderBy('toegevoegdOp','desc'));await fetchAndProcess(q2);}else{log(e);showErrorState();}}}
 
 async function fetchAndProcess(q){const snap=await getDocs(q);const map=new Map();snap.forEach(d=>{const m={id:d.id,...d.data()};const key=`${m.naam}-${m.locatie}-${m.datumStart.toDate().toDateString()}`;map.has(key)||map.set(key,m);});allMarkets=[...map.values()].sort((a,b)=>a.datumStart.toDate()-b.datumStart.toDate());currentPage=1;applyFilters();updateStats();loadHeroMarkets();loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');}
 
@@ -108,4 +105,21 @@ function clearFilters(){filterType&&(filterType.value='');filterLocation&&(filte
 // ──────────────────────────────────────────────────────────────
 // 📤 Rendering
 // ──────────────────────────────────────────────────────────────
-function renderMarkets(){if(!marketsContainer)return;loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');const start=(currentPage-1)*MARKETS_PER_PAGE;const items=filteredMarkets.slice(start,start+MARKETS_PER_PAGE);if(!items.length){noMarketsDiv&&(noMarketsDiv.style.display='block');marketsContainer.style.display='none';resultsCount&&(resultsCount.textContent='0');loadMoreContainer&&(loadMoreContainer.style.display='none');return;}noMarketsDiv&&(noMarketsDiv.style.display='none');marketsContainer.style.display=currentView==='grid'?'grid':'block';marketsContainer.innerHTML='';items.forEach(m=>marketsContainer.appendChild(createMarketCard(m)));loadMoreContainer&&(loadMoreContainer.style.display=filteredMarkets.length>currentPage*MARKETS_PER_PAGE?'block
+function renderMarkets(){if(!marketsContainer)return;loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');const start=(currentPage-1)*MARKETS_PER_PAGE;const items=filteredMarkets.slice(start,start+MARKETS_PER_PAGE);
+  if(!items.length){noMarketsDiv&&(noMarketsDiv.style.display='block');marketsContainer.style.display='none';resultsCount&&(resultsCount.textContent='0 evenementen gevonden');loadMoreContainer&&(loadMoreContainer.style.display='none');return;}
+  noMarketsDiv&&(noMarketsDiv.style.display='none');marketsContainer.style.display=currentView==='grid'?'grid':'block';marketsContainer.innerHTML='';items.forEach(m=>marketsContainer.appendChild(createMarketCard(m)));
+  if(resultsCount){const c=filteredMarkets.length;resultsCount.textContent=`${c} evenement${c!==1?'en':''} gevonden`;}
+  loadMoreContainer&&(loadMoreContainer.style.display=(filteredMarkets.length>currentPage*MARKETS_PER_PAGE?'block':'none'));
+}
+
+function createMarketCard(m){const card=document.createElement('div');card.className='market-card';const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const dateObj=formatDateTime(m.datumStart);
+  card.innerHTML=`<div class="market-image" style="background:linear-gradient(135deg,${getGradientForType(m.type)});display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;">${evt.icon}</div>`+
+    `<div class="market-card-content"><h3>${escapeHtml(m.naam)}</h3><p style="color:#555;font-size:0.875rem;">${dateObj.dayName} • ${dateObj.time}</p>`+
+    `<p style="color:#777;font-size:0.75rem;">${escapeHtml(m.locatie)}</p></div>`;
+  return card;}
+
+function switchView(v){currentView=v;viewGridBtn&&(viewGridBtn.classList.toggle('active',v==='grid'));viewListBtn&&(viewListBtn.classList.toggle('active',v==='list'));renderMarkets();}
+
+function loadHeroMarkets(){if(!heroMarketsContainer)return;const upcoming=allMarkets.filter(m=>m.datumStart.toDate()>new Date()).slice(0,3);heroMarketsContainer.innerHTML='';upcoming.forEach(m=>{const card=document.createElement('div');card.className='market-card';card.innerHTML=`<div style="padding:12px;text-align:center;"><strong>${escapeHtml(m.naam)}</strong><br><small>${formatDateTime(m.datumStart).dayName}</small></div>`;heroMarketsContainer.appendChild(card);});}
+
+function updateStats(){if(!totalMarketsSpan||!upcomingMarketsSpan)return;const now=new Date();const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);const weekEnd=new Date(now);weekEnd.setDate(now.getDate()+7);const inMonth=allMarkets.filter(m=>{const d=m.datumStart.toDate();return d>=now&&d<=monthEnd;}).length;const inWeek=allMarkets.filter(m=>{const d=m.datumStart.toDate();return d>=now&&d<=weekEnd;}).length;animateCounter(totalMarketsSpan,inMonth);animateCounter(upcomingMarketsSpan,inWeek);}

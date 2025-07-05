@@ -1,4 +1,26 @@
-import { 
+// Functie om login interface te tonen wanneer nodig
+function showLoginInterface() {
+  console.log('🔐 Showing login interface on user request');
+  
+  // Check if user is already logged in
+  if (currentUser) {
+    console.log('👤 User already logged in, redirecting to add section');
+    document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+  
+  if (loginContainer) {
+    loginContainer.style.display = 'flex';
+    console.log('✅ Login container shown');
+  }
+}
+
+async function handleLogin() {
+  console.log('🔐 Login button clicked!');
+  
+  if (!loginBtn) {
+    console.error('❌ Login button not found');
+    return;import { 
   auth, 
   provider, 
   db, 
@@ -30,7 +52,7 @@ const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const loginContainer = document.getElementById('login-container');
 const mainContent = document.getElementById('main-content');
-const userBar = document.getElementById('user-bar');
+const userMenu = document.getElementById('user-menu');
 const userEmail = document.getElementById('user-email');
 const marketForm = document.getElementById('market-form');
 const marketsContainer = document.getElementById('markets-container');
@@ -67,7 +89,8 @@ console.log('DOM elementen:', {
   heroMarketsContainer: !!heroMarketsContainer,
   marketsContainer: !!marketsContainer,
   loadingMarketsDiv: !!loadingMarketsDiv,
-  noMarketsDiv: !!noMarketsDiv
+  noMarketsDiv: !!noMarketsDiv,
+  userMenu: !!userMenu
 });
 
 // Global variables
@@ -268,27 +291,18 @@ onAuthStateChanged(auth, (user) => {
   
   if (user) {
     // User is logged in
-    console.log('✅ User logged in, showing main content');
+    console.log('✅ User logged in, updating UI');
     
-    // BELANGRIJK: Hide login container meteen
+    // Hide login container
     if (loginContainer) {
       loginContainer.style.display = 'none';
-      loginContainer.style.visibility = 'hidden';
-      console.log('🚫 Login container forcefully hidden');
+      console.log('🚫 Login container hidden');
     }
     
-    // Show main content
-    if (mainContent) {
-      mainContent.style.display = 'block';
-      mainContent.style.visibility = 'visible';
-      console.log('✅ Main content shown');
-    }
-    
-    // Show user bar
-    if (userBar) {
-      userBar.style.display = 'block';
-      userBar.style.visibility = 'visible';
-      console.log('👤 User bar shown');
+    // Show user menu, hide login buttons
+    if (userMenu) {
+      userMenu.style.display = 'flex';
+      console.log('👤 User menu shown');
     }
     
     // Set user email
@@ -297,13 +311,19 @@ onAuthStateChanged(auth, (user) => {
       console.log('📧 User email set:', user.email);
     }
     
+    // Hide all login buttons
+    const loginButtons = document.querySelectorAll('.nav-login-btn, .show-login');
+    loginButtons.forEach(btn => {
+      btn.style.display = 'none';
+    });
+    console.log('🚫 Login buttons hidden');
+    
     // Check if user is admin
     isAdmin = adminEmails.includes(user.email);
     console.log('👑 Admin status:', isAdmin);
     
     if (adminPanel) {
       adminPanel.style.display = isAdmin ? 'block' : 'none';
-      adminPanel.style.visibility = isAdmin ? 'visible' : 'hidden';
       console.log('🔧 Admin panel:', isAdmin ? 'shown' : 'hidden');
     }
     
@@ -311,39 +331,40 @@ onAuthStateChanged(auth, (user) => {
     const toevoegenSection = document.getElementById('toevoegen');
     if (toevoegenSection) {
       toevoegenSection.style.display = 'block';
-      toevoegenSection.style.visibility = 'visible';
       console.log('➕ Toevoegen section shown');
     }
     
-    // Update navigation to show logout instead of login
-    updateNavigationForLoggedInUser();
+    // Update navigation - make "Toevoegen" link work normally
+    const navAddLink = document.querySelector('.nav-add-link');
+    if (navAddLink) {
+      navAddLink.onclick = null; // Remove any click handlers
+      navAddLink.href = '#toevoegen'; // Ensure it points to the section
+    }
     
     // Load markets for authenticated users
     loadMarkets();
   } else {
-    // User is logged out - FOR PUBLIC VIEWING
+    // User is logged out
     console.log('👤 User logged out, setting up public view');
     
-    // Keep login container hidden for public view
+    // Hide login container for public view
     if (loginContainer) {
       loginContainer.style.display = 'none';
-      loginContainer.style.visibility = 'hidden';
       console.log('🚫 Login container hidden for public view');
     }
     
-    // Keep main content visible for public viewing
-    if (mainContent) {
-      mainContent.style.display = 'block';
-      mainContent.style.visibility = 'visible';
-      console.log('📄 Main content kept visible for public');
+    // Hide user menu, show login buttons
+    if (userMenu) {
+      userMenu.style.display = 'none';
+      console.log('🚫 User menu hidden');
     }
     
-    // Hide user bar
-    if (userBar) {
-      userBar.style.display = 'none';
-      userBar.style.visibility = 'hidden';
-      console.log('🚫 User bar hidden');
-    }
+    // Show login buttons
+    const loginButtons = document.querySelectorAll('.nav-login-btn, .show-login');
+    loginButtons.forEach(btn => {
+      btn.style.display = '';
+    });
+    console.log('✅ Login buttons shown');
     
     // Hide admin and add sections for logged out users
     const toevoegenSection = document.getElementById('toevoegen');
@@ -351,17 +372,21 @@ onAuthStateChanged(auth, (user) => {
     
     if (toevoegenSection) {
       toevoegenSection.style.display = 'none';
-      toevoegenSection.style.visibility = 'hidden';
       console.log('🚫 Toevoegen section hidden');
     }
     if (adminSection) {
       adminSection.style.display = 'none';
-      adminSection.style.visibility = 'hidden';
       console.log('🚫 Admin section hidden');
     }
     
-    // Update navigation for logged out user
-    updateNavigationForLoggedOutUser();
+    // Update navigation - make "Toevoegen" link show login
+    const navAddLink = document.querySelector('.nav-add-link');
+    if (navAddLink) {
+      navAddLink.onclick = (e) => {
+        e.preventDefault();
+        showLoginInterface();
+      };
+    }
     
     currentUser = null;
     isAdmin = false;

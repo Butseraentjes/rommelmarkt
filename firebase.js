@@ -1,9 +1,23 @@
 // firebase.js
 // Deze versie gebruikt de moderne modulaire Firebase SDK via ESM (ES Modules)
-
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, collection, addDoc, getDocs, query, where } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut,
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  where,
+  orderBy,
+  Timestamp
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 // 🔥 Jouw Firebase-configuratie (deze is publiek bruikbaar voor frontend-projecten)
 const firebaseConfig = {
@@ -30,11 +44,14 @@ export {
   auth,
   provider,
   signInWithPopup,
+  signOut,
   onAuthStateChanged,
   db,
   collection,
   addDoc,
   getDocs,
   query,
-  where
+  where,
+  orderBy,
+  Timestamp
 };

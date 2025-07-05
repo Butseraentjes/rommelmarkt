@@ -1,9 +1,285 @@
+import { 
+  auth, 
+  provider, 
+  db, 
+  signInWithPopup, 
+  signOut,
+  onAuthStateChanged, 
+  collection, 
+  addDoc,
+  getDocs,
+  query,
+  orderBy,
+  where,
+  Timestamp,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  eventTypes,
+  adminEmails,
+  deleteDoc,
+  doc
+} from './firebase.js';
+
+// DOM elementen
+const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const loginContainer = document.getElementById('login-container');
+const mainContent = document.getElementById('main-content');
+const userEmail = document.getElementById('user-email');
+const marketForm = document.getElementById('market-form');
+const marketsContainer = document.getElementById('markets-container');
+const noMarketsDiv = document.getElementById('no-markets');
+const filterType = document.getElementById('filter-type');
+const filterLocation = document.getElementById('filter-location');
+const filterDate = document.getElementById('filter-date');
+const clearFiltersBtn = document.getElementById('clear-filters');
+const viewGridBtn = document.getElementById('view-grid');
+const viewListBtn = document.getElementById('view-list');
+const resultsCount = document.getElementById('results-count');
+const loadingMarketsDiv = document.getElementById('loading-markets');
+const loadMoreBtn = document.getElementById('load-more-btn');
+const loadMoreContainer = document.getElementById('load-more-container');
+const suggestEventBtn = document.getElementById('suggest-event');
+const totalMarketsSpan = document.getElementById('total-markets');
+const upcomingMarketsSpan = document.getElementById('upcoming-markets');
+
+// Admin elements
+const adminPanel = document.getElementById('admin-panel');
+const bulkImportForm = document.getElementById('bulk-import-form');
+const bulkDataTextarea = document.getElementById('bulk-data');
+const clearAllBtn = document.getElementById('clear-all-btn');
+const importResults = document.getElementById('import-results');
+
+// Global variables
+let allMarkets = [];
+let filteredMarkets = [];
+let currentUser = null;
+let isAdmin = false;
+let currentView = 'grid';
+let marketsPerPage = 12;
+let currentPage = 1;
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  updateStats();
+});
+
+// Event listeners
+function setupEventListeners() {
+  if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+  if (marketForm) marketForm.addEventListener('submit', handleAddMarket);
+  
+  // Filter event listeners
+  if (filterType) filterType.addEventListener('change', applyFilters);
+  if (filterLocation) filterLocation.addEventListener('input', debounce(applyFilters, 300));
+  if (filterDate) filterDate.addEventListener('change', applyFilters);
+  if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearFilters);
+  
+  // View toggle listeners
+  if (viewGridBtn) viewGridBtn.addEventListener('click', () => switchView('grid'));
+  if (viewListBtn) viewListBtn.addEventListener('click', () => switchView('list'));
+  
+  // Load more listener
+  if (loadMoreBtn) loadMoreBtn.addEventListener('click', loadMoreMarkets);
+  
+  // Suggest event listener
+  if (suggestEventBtn) {
+    suggestEventBtn.addEventListener('click', () => {
+      document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
+    });
+  }
+  
+  // Admin event listeners
+  if (bulkImportForm) bulkImportForm.addEventListener('submit', handleBulkImport);
+  if (clearAllBtn) clearAllBtn.addEventListener('click', handleClearAll);
+  
+  // Smooth scrolling for navigation links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+}
+
+// Authentication functions
+async function handleLogin() {
+  try {
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<span class="btn-icon">⏳</span> Inloggen...';
+    
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    const result = await signInWithPopup(auth, provider);
+    console.log('Login succesvol:', result.user.email);
+    
+  } catch (err) {
+    console.error('Login fout:', err);
+    
+    let errorMessage = 'Er ging iets mis bij het inloggen. Probeer opnieuw.';
+    
+    if (err.code === 'auth/popup-closed-by-user') {
+      errorMessage = 'Login geannuleerd. Probeer opnieuw als je wilt inloggen.';
+    } else if (err.code === 'auth/popup-blocked') {
+      errorMessage = 'Popup werd geblokkeerd door je browser. Sta popups toe en probeer opnieuw.';
+    }
+    
+    alert(errorMessage);
+    
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
+  }
+}
+
+async function handleLogout() {
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.error('Logout fout:', err);
+  }
+}
+
+// Auth state observer
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  if (user) {
+    loginContainer.style.display = 'none';
+    mainContent.style.display = 'block';
+    userEmail.textContent = user.email;
+    
+    // Check if user is admin
+    isAdmin = adminEmails.includes(user.email);
+    if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
+    
+    loadMarkets();
+  } else {
+    loginContainer.style.display = 'flex';
+    mainContent.style.display = 'none';
+    if (adminPanel) adminPanel.style.display = 'none';
+    currentUser = null;
+    isAdmin = false;
+  }
+});
+
+// Market form handling
+async function handleAddMarket(e) {
+  e.preventDefault();
+  
+  if (!currentUser) {
+    alert('Je moet ingelogd zijn om een evenement toe te voegen.');
+    return;
+  }
+
+  const submitBtn = marketForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  
+  try {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Toevoegen...';
+
+    const formData = getFormData();
+    const validation = validateFormData(formData);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    const marketData = prepareMarketData(formData);
+    await addDoc(collection(db, 'rommelmarkten'), marketData);
+    
+    showSuccessMessage('Evenement succesvol toegevoegd!');
+    marketForm.reset();
+    loadMarkets();
+    
+    document.getElementById('markten').scrollIntoView({ behavior: 'smooth' });
+
+  } catch (error) {
+    console.error('Fout bij toevoegen:', error);
+    alert('Er ging iets mis bij het toevoegen. Probeer opnieuw.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+}
+
+function getFormData() {
+  return {
+    naam: document.getElementById('market-name').value.trim(),
+    type: document.getElementById('market-type').value,
+    locatie: document.getElementById('market-location').value.trim(),
+    organisator: document.getElementById('market-organizer').value.trim(),
+    datum: document.getElementById('market-date').value,
+    tijdStart: document.getElementById('market-time-start').value,
+    tijdEind: document.getElementById('market-time-end').value,
+    aantalStanden: document.getElementById('market-stands').value,
+    standgeld: document.getElementById('market-price').value,
+    contact: document.getElementById('market-contact').value.trim(),
+    beschrijving: document.getElementById('market-description').value.trim()
+  };
+}
+
+function validateFormData(data) {
+  if (!data.naam || !data.type || !data.locatie || !data.datum || !data.tijdStart) {
+    return { isValid: false, message: 'Vul alle verplichte velden in.' };
+  }
+
+  const startDateTime = new Date(`${data.datum}T${data.tijdStart}`);
+  const now = new Date();
+  
+  if (startDateTime < now) {
+    return { isValid: false, message: 'De datum en tijd kunnen niet in het verleden liggen.' };
+  }
+
+  if (data.tijdEind) {
+    const endDateTime = new Date(`${data.datum}T${data.tijdEind}`);
+    if (endDateTime <= startDateTime) {
+      return { isValid: false, message: 'De eindtijd moet na de starttijd liggen.' };
+    }
+  }
+
+  return { isValid: true };
+}
+
+function prepareMarketData(formData) {
+  const startDateTime = new Date(`${formData.datum}T${formData.tijdStart}`);
+  let endDateTime = null;
+  
+  if (formData.tijdEind) {
+    endDateTime = new Date(`${formData.datum}T${formData.tijdEind}`);
+  }
+
+  return {
+    userId: currentUser.uid,
+    email: currentUser.email,
+    naam: formData.naam,
+    type: formData.type,
+    locatie: formData.locatie,
+    organisator: formData.organisator || '',
+    datumStart: Timestamp.fromDate(startDateTime),
+    datumEind: endDateTime ? Timestamp.fromDate(endDateTime) : null,
+    aantalStanden: formData.aantalStanden ? parseInt(formData.aantalStanden) : null,
+    standgeld: formData.standgeld ? parseFloat(formData.standgeld) : null,
+    contact: formData.contact || '',
+    beschrijving: formData.beschrijving || '',
+    toegevoegdOp: Timestamp.now(),
+    status: 'actief'
+  };
+}
+
 // Load and display markets
 async function loadMarkets() {
   try {
     showLoadingState();
     
-    // Tijdelijke fallback zonder status filter als index nog niet bestaat
     let q;
     try {
       q = query(
@@ -25,7 +301,6 @@ async function loadMarkets() {
     querySnapshot.forEach((doc) => {
       const market = { id: doc.id, ...doc.data() };
       
-      // Filter op actieve status en toekomstige evenementen
       const now = new Date();
       const marketDate = market.datumStart.toDate();
       const isActive = !market.status || market.status === 'actief';
@@ -35,17 +310,13 @@ async function loadMarkets() {
       }
     });
 
-    // Reset pagination
     currentPage = 1;
-    
-    // Apply current filters
     applyFilters();
     updateStats();
 
   } catch (error) {
     console.error('Fout bij laden evenementen:', error);
     
-    // Probeer backup query zonder where clause
     try {
       console.log('Probeer backup query...');
       const backupQuery = query(
@@ -66,7 +337,6 @@ async function loadMarkets() {
         }
       });
       
-      // Sorteer handmatig op datum
       allMarkets.sort((a, b) => a.datumStart.toDate() - b.datumStart.toDate());
       
       currentPage = 1;
@@ -81,16 +351,26 @@ async function loadMarkets() {
 }
 
 function showLoadingState() {
-  loadingMarketsDiv.style.display = 'block';
-  marketsContainer.style.display = 'none';
-  noMarketsDiv.style.display = 'none';
-  loadMoreContainer.style.display = 'none';
+  if (loadingMarketsDiv) {
+    loadingMarketsDiv.style.display = 'block';
+  }
+  if (marketsContainer) {
+    marketsContainer.style.display = 'none';
+  }
+  if (noMarketsDiv) {
+    noMarketsDiv.style.display = 'none';
+  }
+  if (loadMoreContainer) {
+    loadMoreContainer.style.display = 'none';
+  }
 }
 
 function applyFilters() {
-  const typeFilter = filterType.value.toLowerCase();
-  const locationFilter = filterLocation.value.toLowerCase();
-  const dateFilter = filterDate.value;
+  if (!allMarkets) return;
+  
+  const typeFilter = filterType ? filterType.value.toLowerCase() : '';
+  const locationFilter = filterLocation ? filterLocation.value.toLowerCase() : '';
+  const dateFilter = filterDate ? filterDate.value : '';
   
   filteredMarkets = allMarkets.filter(market => {
     // Type filter
@@ -127,7 +407,7 @@ function applyFilters() {
           break;
         case 'weekend':
           const day = marketDate.getDay();
-          if (day !== 0 && day !== 6) return false; // 0 = Sunday, 6 = Saturday
+          if (day !== 0 && day !== 6) return false;
           break;
         case 'month':
           if (marketDate.getMonth() !== now.getMonth() || marketDate.getFullYear() !== now.getFullYear()) {
@@ -140,44 +420,46 @@ function applyFilters() {
     return true;
   });
   
-  // Reset to first page when filters change
   currentPage = 1;
   displayMarkets();
   updateResultsInfo();
 }
 
 function displayMarkets() {
-  loadingMarketsDiv.style.display = 'none';
+  if (loadingMarketsDiv) loadingMarketsDiv.style.display = 'none';
   
-  if (filteredMarkets.length === 0) {
-    marketsContainer.style.display = 'none';
-    noMarketsDiv.style.display = 'block';
-    loadMoreContainer.style.display = 'none';
+  if (!filteredMarkets || filteredMarkets.length === 0) {
+    if (marketsContainer) marketsContainer.style.display = 'none';
+    if (noMarketsDiv) noMarketsDiv.style.display = 'block';
+    if (loadMoreContainer) loadMoreContainer.style.display = 'none';
     return;
   }
   
-  noMarketsDiv.style.display = 'none';
-  marketsContainer.style.display = currentView === 'grid' ? 'grid' : 'block';
-  marketsContainer.className = currentView === 'grid' ? 'markets-grid' : 'markets-list';
+  if (noMarketsDiv) noMarketsDiv.style.display = 'none';
+  if (marketsContainer) {
+    marketsContainer.style.display = currentView === 'grid' ? 'grid' : 'block';
+    marketsContainer.className = currentView === 'grid' ? 'markets-grid' : 'markets-list';
+  }
   
-  // Calculate pagination
   const startIndex = (currentPage - 1) * marketsPerPage;
   const endIndex = Math.min(startIndex + marketsPerPage, filteredMarkets.length);
   const marketsToShow = filteredMarkets.slice(0, endIndex);
   
-  // Clear container and add markets
-  marketsContainer.innerHTML = '';
-  marketsToShow.forEach(market => {
-    const marketElement = createMarketCard(market);
-    marketsContainer.appendChild(marketElement);
-  });
+  if (marketsContainer) {
+    marketsContainer.innerHTML = '';
+    marketsToShow.forEach(market => {
+      const marketElement = createMarketCard(market);
+      marketsContainer.appendChild(marketElement);
+    });
+  }
   
-  // Show/hide load more button
-  if (endIndex < filteredMarkets.length) {
-    loadMoreContainer.style.display = 'block';
-    loadMoreBtn.textContent = `Meer laden (${filteredMarkets.length - endIndex} resterende)`;
-  } else {
-    loadMoreContainer.style.display = 'none';
+  if (loadMoreContainer && loadMoreBtn) {
+    if (endIndex < filteredMarkets.length) {
+      loadMoreContainer.style.display = 'block';
+      loadMoreBtn.textContent = `Meer laden (${filteredMarkets.length - endIndex} resterende)`;
+    } else {
+      loadMoreContainer.style.display = 'none';
+    }
   }
 }
 
@@ -296,27 +578,29 @@ function createListView(market, eventType, dateTime, endTime) {
 }
 
 function clearFilters() {
-  filterType.value = '';
-  filterLocation.value = '';
-  filterDate.value = '';
+  if (filterType) filterType.value = '';
+  if (filterLocation) filterLocation.value = '';
+  if (filterDate) filterDate.value = '';
   applyFilters();
 }
 
 function switchView(view) {
   currentView = view;
   
-  // Update button states
-  viewGridBtn.classList.toggle('active', view === 'grid');
-  viewListBtn.classList.toggle('active', view === 'list');
+  if (viewGridBtn && viewListBtn) {
+    viewGridBtn.classList.toggle('active', view === 'grid');
+    viewListBtn.classList.toggle('active', view === 'list');
+  }
   
-  // Redisplay markets
   displayMarkets();
 }
 
 function updateResultsInfo() {
-  const count = filteredMarkets.length;
-  const word = count === 1 ? 'evenement' : 'evenementen';
-  resultsCount.textContent = `${count} ${word} gevonden`;
+  if (resultsCount && filteredMarkets) {
+    const count = filteredMarkets.length;
+    const word = count === 1 ? 'evenement' : 'evenementen';
+    resultsCount.textContent = `${count} ${word} gevonden`;
+  }
 }
 
 // Helper functions
@@ -326,483 +610,6 @@ function isSameDay(date1, date2) {
          date1.getFullYear() === date2.getFullYear();
 }
 
-// Update the old filterMarkets function to use new applyFilters
-// (filterMarkets functie verwijderd - we gebruiken nu applyFilters)
-      import { 
-  auth, 
-  provider, 
-  db, 
-  signInWithPopup, 
-  signOut,
-  onAuthStateChanged, 
-  collection, 
-  addDoc,
-  getDocs,
-  query,
-  orderBy,
-  where,
-  Timestamp,
-  formatDate,
-  formatTime,
-  formatDateTime,
-  eventTypes,
-  adminEmails,
-  deleteDoc,
-  doc
-} from './firebase.js';
-
-// DOM elementen
-const loginBtn = document.getElementById('login-btn');
-const logoutBtn = document.getElementById('logout-btn');
-const loginContainer = document.getElementById('login-container');
-const mainContent = document.getElementById('main-content');
-const userEmail = document.getElementById('user-email');
-const marketForm = document.getElementById('market-form');
-const marketsContainer = document.getElementById('markets-container');
-const noMarketsDiv = document.getElementById('no-markets');
-const filterType = document.getElementById('filter-type');
-const filterLocation = document.getElementById('filter-location');
-const filterDate = document.getElementById('filter-date');
-const clearFiltersBtn = document.getElementById('clear-filters');
-const viewGridBtn = document.getElementById('view-grid');
-const viewListBtn = document.getElementById('view-list');
-const resultsCount = document.getElementById('results-count');
-const loadingMarketsDiv = document.getElementById('loading-markets');
-const loadMoreBtn = document.getElementById('load-more-btn');
-const loadMoreContainer = document.getElementById('load-more-container');
-const suggestEventBtn = document.getElementById('suggest-event');
-const totalMarketsSpan = document.getElementById('total-markets');
-const upcomingMarketsSpan = document.getElementById('upcoming-markets');
-
-// Admin elements
-const adminPanel = document.getElementById('admin-panel');
-const bulkImportForm = document.getElementById('bulk-import-form');
-const bulkDataTextarea = document.getElementById('bulk-data');
-const clearAllBtn = document.getElementById('clear-all-btn');
-const importResults = document.getElementById('import-results');
-
-// Global variables
-let allMarkets = [];
-let filteredMarkets = [];
-let currentUser = null;
-let isAdmin = false;
-let currentView = 'grid'; // 'grid' or 'list'
-let marketsPerPage = 12;
-let currentPage = 1;
-
-// Initialize app
-document.addEventListener('DOMContentLoaded', () => {
-  setupEventListeners();
-  updateStats();
-});
-
-// Event listeners
-function setupEventListeners() {
-  loginBtn.addEventListener('click', handleLogin);
-  logoutBtn.addEventListener('click', handleLogout);
-  marketForm.addEventListener('submit', handleAddMarket);
-  
-  // Filter event listeners
-  filterType.addEventListener('change', applyFilters);
-  filterLocation.addEventListener('input', debounce(applyFilters, 300));
-  filterDate.addEventListener('change', applyFilters);
-  clearFiltersBtn.addEventListener('click', clearFilters);
-  
-  // View toggle listeners
-  viewGridBtn.addEventListener('click', () => switchView('grid'));
-  viewListBtn.addEventListener('click', () => switchView('list'));
-  
-  // Load more listener
-  loadMoreBtn.addEventListener('click', loadMoreMarkets);
-  
-  // Suggest event listener
-  suggestEventBtn.addEventListener('click', () => {
-    document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
-  });
-  
-  // Admin event listeners
-  bulkImportForm.addEventListener('submit', handleBulkImport);
-  clearAllBtn.addEventListener('click', handleClearAll);
-  
-  // Smooth scrolling for navigation links
-  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-      e.preventDefault();
-      const target = document.querySelector(this.getAttribute('href'));
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth' });
-      }
-    });
-  });
-}
-
-// Authentication functions
-async function handleLogin() {
-  try {
-    loginBtn.disabled = true;
-    loginBtn.innerHTML = '<span class="btn-icon">⏳</span> Inloggen...';
-    
-    // Extra configuratie voor popup om CORP warnings te minimaliseren
-    provider.setCustomParameters({
-      prompt: 'select_account'
-    });
-    
-    const result = await signInWithPopup(auth, provider);
-    console.log('Login succesvol:', result.user.email);
-    
-  } catch (err) {
-    console.error('Login fout:', err);
-    
-    // Specifieke foutafhandeling
-    let errorMessage = 'Er ging iets mis bij het inloggen. Probeer opnieuw.';
-    
-    if (err.code === 'auth/popup-closed-by-user') {
-      errorMessage = 'Login geannuleerd. Probeer opnieuw als je wilt inloggen.';
-    } else if (err.code === 'auth/popup-blocked') {
-      errorMessage = 'Popup werd geblokkeerd door je browser. Sta popups toe en probeer opnieuw.';
-    }
-    
-    alert(errorMessage);
-    
-  } finally {
-    loginBtn.disabled = false;
-    loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
-  }
-}
-
-async function handleLogout() {
-  try {
-    await signOut(auth);
-  } catch (err) {
-    console.error('Logout fout:', err);
-  }
-}
-
-// Auth state observer
-onAuthStateChanged(auth, (user) => {
-  currentUser = user;
-  if (user) {
-    loginContainer.style.display = 'none';
-    mainContent.style.display = 'block';
-    userEmail.textContent = user.email;
-    
-    // Check if user is admin
-    isAdmin = adminEmails.includes(user.email);
-    adminPanel.style.display = isAdmin ? 'block' : 'none';
-    
-    loadMarkets();
-  } else {
-    loginContainer.style.display = 'flex';
-    mainContent.style.display = 'none';
-    adminPanel.style.display = 'none';
-    currentUser = null;
-    isAdmin = false;
-  }
-});
-
-// Market form handling
-async function handleAddMarket(e) {
-  e.preventDefault();
-  
-  if (!currentUser) {
-    alert('Je moet ingelogd zijn om een evenement toe te voegen.');
-    return;
-  }
-
-  const submitBtn = marketForm.querySelector('button[type="submit"]');
-  const originalText = submitBtn.innerHTML;
-  
-  try {
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Toevoegen...';
-
-    // Haal formulier data op
-    const formData = getFormData();
-    
-    // Validatie
-    const validation = validateFormData(formData);
-    if (!validation.isValid) {
-      alert(validation.message);
-      return;
-    }
-
-    // Bereid data voor database voor
-    const marketData = prepareMarketData(formData);
-
-    // Voeg toe aan database
-    await addDoc(collection(db, 'rommelmarkten'), marketData);
-    
-    // Success feedback
-    showSuccessMessage('Evenement succesvol toegevoegd!');
-    marketForm.reset();
-    loadMarkets();
-    
-    // Scroll naar markten sectie
-    document.getElementById('markten').scrollIntoView({ behavior: 'smooth' });
-
-  } catch (error) {
-    console.error('Fout bij toevoegen:', error);
-    alert('Er ging iets mis bij het toevoegen. Probeer opnieuw.');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalText;
-  }
-}
-
-function getFormData() {
-  return {
-    naam: document.getElementById('market-name').value.trim(),
-    type: document.getElementById('market-type').value,
-    locatie: document.getElementById('market-location').value.trim(),
-    organisator: document.getElementById('market-organizer').value.trim(),
-    datum: document.getElementById('market-date').value,
-    tijdStart: document.getElementById('market-time-start').value,
-    tijdEind: document.getElementById('market-time-end').value,
-    aantalStanden: document.getElementById('market-stands').value,
-    standgeld: document.getElementById('market-price').value,
-    contact: document.getElementById('market-contact').value.trim(),
-    beschrijving: document.getElementById('market-description').value.trim()
-  };
-}
-
-function validateFormData(data) {
-  if (!data.naam || !data.type || !data.locatie || !data.datum || !data.tijdStart) {
-    return { isValid: false, message: 'Vul alle verplichte velden in.' };
-  }
-
-  // Check datum
-  const startDateTime = new Date(`${data.datum}T${data.tijdStart}`);
-  const now = new Date();
-  
-  if (startDateTime < now) {
-    return { isValid: false, message: 'De datum en tijd kunnen niet in het verleden liggen.' };
-  }
-
-  // Check eindtijd
-  if (data.tijdEind) {
-    const endDateTime = new Date(`${data.datum}T${data.tijdEind}`);
-    if (endDateTime <= startDateTime) {
-      return { isValid: false, message: 'De eindtijd moet na de starttijd liggen.' };
-    }
-  }
-
-  return { isValid: true };
-}
-
-function prepareMarketData(formData) {
-  const startDateTime = new Date(`${formData.datum}T${formData.tijdStart}`);
-  let endDateTime = null;
-  
-  if (formData.tijdEind) {
-    endDateTime = new Date(`${formData.datum}T${formData.tijdEind}`);
-  }
-
-  return {
-    userId: currentUser.uid,
-    email: currentUser.email,
-    naam: formData.naam,
-    type: formData.type,
-    locatie: formData.locatie,
-    organisator: formData.organisator || '',
-    datumStart: Timestamp.fromDate(startDateTime),
-    datumEind: endDateTime ? Timestamp.fromDate(endDateTime) : null,
-    aantalStanden: formData.aantalStanden ? parseInt(formData.aantalStanden) : null,
-    standgeld: formData.standgeld ? parseFloat(formData.standgeld) : null,
-    contact: formData.contact || '',
-    beschrijving: formData.beschrijving || '',
-    toegevoegdOp: Timestamp.now(),
-    status: 'actief'
-  };
-}
-
-// Load and display markets
-async function loadMarkets() {
-  try {
-    showLoadingState();
-    
-    // Tijdelijke fallback zonder status filter als index nog niet bestaat
-    let q;
-    try {
-      q = query(
-        collection(db, 'rommelmarkten'),
-        where('status', '==', 'actief'),
-        orderBy('datumStart', 'asc')
-      );
-    } catch (indexError) {
-      console.log('Index nog niet klaar, gebruik eenvoudige query...');
-      q = query(
-        collection(db, 'rommelmarkten'),
-        orderBy('datumStart', 'asc')
-      );
-    }
-    
-    const querySnapshot = await getDocs(q);
-    allMarkets = [];
-
-    querySnapshot.forEach((doc) => {
-      const market = { id: doc.id, ...doc.data() };
-      
-      // Filter op actieve status en toekomstige evenementen
-      const now = new Date();
-      const marketDate = market.datumStart.toDate();
-      const isActive = !market.status || market.status === 'actief';
-      
-      if (marketDate > now && isActive) {
-        allMarkets.push(market);
-      }
-    });
-
-    displayMarkets(allMarkets);
-    updateStats();
-
-  } catch (error) {
-    console.error('Fout bij laden evenementen:', error);
-    
-    // Probeer backup query zonder where clause
-    try {
-      console.log('Probeer backup query...');
-      const backupQuery = query(
-        collection(db, 'rommelmarkten'),
-        orderBy('toegevoegdOp', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(backupQuery);
-      allMarkets = [];
-
-      querySnapshot.forEach((doc) => {
-        const market = { id: doc.id, ...doc.data() };
-        const now = new Date();
-        const marketDate = market.datumStart.toDate();
-        
-        if (marketDate > now) {
-          allMarkets.push(market);
-        }
-      });
-      
-      // Sorteer handmatig op datum
-      allMarkets.sort((a, b) => a.datumStart.toDate() - b.datumStart.toDate());
-      
-      displayMarkets(allMarkets);
-      updateStats();
-      
-    } catch (backupError) {
-      console.error('Ook backup query mislukt:', backupError);
-      showErrorState();
-    }
-  }
-}
-
-function displayMarkets(markets) {
-  marketsContainer.innerHTML = '';
-  
-  if (markets.length === 0) {
-    noMarketsDiv.style.display = 'block';
-    return;
-  }
-  
-  noMarketsDiv.style.display = 'none';
-  
-  markets.forEach(market => {
-    const marketElement = createMarketCard(market);
-    marketsContainer.appendChild(marketElement);
-  });
-}
-
-function createMarketCard(market) {
-  const card = document.createElement('div');
-  card.className = 'market-card';
-  
-  const eventType = eventTypes[market.type] || eventTypes.rommelmarkt;
-  const dateTime = formatDateTime(market.datumStart);
-  const endTime = market.datumEind ? formatTime(market.datumEind) : null;
-  
-  card.innerHTML = `
-    <div class="market-type-badge ${eventType.color}">
-      ${eventType.icon} ${eventType.label}
-    </div>
-    
-    <h3>${escapeHtml(market.naam)}</h3>
-    
-    <div class="market-date-time">
-      📅 ${dateTime.date}
-      <br>
-      🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
-    </div>
-    
-    <div class="market-detail">
-      <span class="market-detail-icon">📍</span>
-      <span>${escapeHtml(market.locatie)}</span>
-    </div>
-    
-    ${market.organisator ? `
-      <div class="market-detail">
-        <span class="market-detail-icon">👥</span>
-        <span>${escapeHtml(market.organisator)}</span>
-      </div>
-    ` : ''}
-    
-    ${market.aantalStanden ? `
-      <div class="market-detail">
-        <span class="market-detail-icon">🏪</span>
-        <span>${market.aantalStanden} standjes</span>
-      </div>
-    ` : ''}
-    
-    ${market.standgeld ? `
-      <div class="market-detail">
-        <span class="market-detail-icon">💰</span>
-        <span>€${market.standgeld.toFixed(2)} per meter</span>
-      </div>
-    ` : ''}
-    
-    ${market.contact ? `
-      <div class="market-detail">
-        <span class="market-detail-icon">📞</span>
-        <span>${escapeHtml(market.contact)}</span>
-      </div>
-    ` : ''}
-    
-    ${market.beschrijving ? `
-      <div class="market-description">
-        ${escapeHtml(market.beschrijving)}
-      </div>
-    ` : ''}
-    
-    <div class="market-added-by">
-      Toegevoegd door ${escapeHtml(market.email)} op ${formatDate(market.toegevoegdOp)}
-    </div>
-  `;
-  
-  return card;
-}
-
-// Filter functions
-function filterMarkets() {
-  const typeFilter = filterType.value.toLowerCase();
-  const locationFilter = filterLocation.value.toLowerCase();
-  
-  let filteredMarkets = allMarkets;
-  
-  // Filter op type
-  if (typeFilter) {
-    filteredMarkets = filteredMarkets.filter(market => 
-      market.type === typeFilter
-    );
-  }
-  
-  // Filter op locatie
-  if (locationFilter) {
-    filteredMarkets = filteredMarkets.filter(market => 
-      market.locatie.toLowerCase().includes(locationFilter) ||
-      market.naam.toLowerCase().includes(locationFilter) ||
-      (market.organisator && market.organisator.toLowerCase().includes(locationFilter))
-    );
-  }
-  
-  displayMarkets(filteredMarkets);
-}
-
-// Utility functions
 function debounce(func, wait) {
   let timeout;
   return function executedFunction(...args) {
@@ -826,28 +633,19 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
-function showLoadingState() {
-  marketsContainer.innerHTML = `
-    <div style="text-align: center; padding: 2rem; color: #718096;">
-      <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
-      <p>Evenementen laden...</p>
-    </div>
-  `;
-  noMarketsDiv.style.display = 'none';
-}
-
 function showErrorState() {
-  marketsContainer.innerHTML = `
-    <div style="text-align: center; padding: 2rem; color: #e53e3e;">
-      <div style="font-size: 2rem; margin-bottom: 1rem;">❌</div>
-      <p>Fout bij het laden van evenementen. Probeer de pagina te verversen.</p>
-    </div>
-  `;
-  noMarketsDiv.style.display = 'none';
+  if (marketsContainer) {
+    marketsContainer.innerHTML = `
+      <div style="text-align: center; padding: 2rem; color: #e53e3e;">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">❌</div>
+        <p>Fout bij het laden van evenementen. Probeer de pagina te verversen.</p>
+      </div>
+    `;
+  }
+  if (noMarketsDiv) noMarketsDiv.style.display = 'none';
 }
 
 function showSuccessMessage(message) {
-  // Creer een tijdelijke success melding
   const successDiv = document.createElement('div');
   successDiv.style.cssText = `
     position: fixed;
@@ -865,35 +663,35 @@ function showSuccessMessage(message) {
   
   document.body.appendChild(successDiv);
   
-  // Verwijder na 3 seconden
   setTimeout(() => {
     successDiv.remove();
   }, 3000);
 }
 
 function updateStats() {
+  if (!totalMarketsSpan || !upcomingMarketsSpan || !allMarkets) return;
+  
   const now = new Date();
   const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const thisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   
-  // Count markets this month
   const thisMonthCount = allMarkets.filter(market => {
     const marketDate = market.datumStart.toDate();
     return marketDate >= now && marketDate <= thisMonth;
   }).length;
   
-  // Count markets next week
   const nextWeekCount = allMarkets.filter(market => {
     const marketDate = market.datumStart.toDate();
     return marketDate >= now && marketDate <= nextWeek;
   }).length;
   
-  // Animate counters
   animateCounter(totalMarketsSpan, thisMonthCount);
   animateCounter(upcomingMarketsSpan, nextWeekCount);
 }
 
 function animateCounter(element, targetValue) {
+  if (!element) return;
+  
   const startValue = 0;
   const duration = 1000;
   const startTime = performance.now();
@@ -957,7 +755,6 @@ async function handleBulkImport(e) {
         await addDoc(collection(db, 'rommelmarkten'), marketData);
         imported++;
         
-        // Update progress
         updateImportProgress(i + 1, markets.length);
         
       } catch (error) {
@@ -969,7 +766,6 @@ async function handleBulkImport(e) {
     const resultMsg = `Import voltooid! ✅ ${imported} geïmporteerd, ❌ ${errors} fouten.`;
     showImportResult(resultMsg, 'success');
     
-    // Clear textarea and reload markets
     bulkDataTextarea.value = '';
     loadMarkets();
     
@@ -981,11 +777,7 @@ async function handleBulkImport(e) {
 
 function parseRommelmarktData(rawData) {
   const markets = [];
-  
-  // Eerst: reorganiseer de data om datum/tijd bij het juiste evenement te voegen
   const reorganizedData = reorganizeMarketData(rawData);
-  
-  // Split data into blocks separated by 'L' markers
   const blocks = reorganizedData.split(/^L\s*$/m).filter(block => block.trim());
   
   for (const block of blocks) {
@@ -1003,9 +795,7 @@ function parseRommelmarktData(rawData) {
 }
 
 function reorganizeMarketData(rawData) {
-  // Split op L markers maar behoud de L markers
   const parts = rawData.split(/^L\s*$/m);
-  
   const reorganized = [];
   let currentEventData = '';
   
@@ -1013,28 +803,21 @@ function reorganizeMarketData(rawData) {
     const part = parts[i].trim();
     if (!part) continue;
     
-    // Check if this part contains plaats/postcode (start of new event)
     const hasLocation = /^[A-Z\s-]+\s*\(\d{4}\)/.test(part);
-    
-    // Check if this part contains datum (za/zo/ma etc.)
     const hasDate = /^(ma|di|wo|do|vr|za|zo)\s+\d{1,2}\s+\w+\s+\d{4}/.test(part);
     
     if (hasLocation) {
-      // Start of new event
       if (currentEventData) {
         reorganized.push('L\n' + currentEventData);
       }
       currentEventData = part;
     } else if (hasDate && currentEventData) {
-      // Add date/time to current event
       currentEventData += '\n' + part;
     } else if (currentEventData) {
-      // Add additional info to current event
       currentEventData += '\n' + part;
     }
   }
   
-  // Don't forget the last event
   if (currentEventData) {
     reorganized.push('L\n' + currentEventData);
   }
@@ -1060,42 +843,32 @@ function parseMarketBlock(block) {
   let standgeld = null;
   let type = 'rommelmarkt';
   
-  console.log('Parsing block with lines:', lines); // Debug log
-  
-  // Parse eerste regel voor plaats en postcode
   const firstLine = lines[0];
   const plaatsMatch = firstLine.match(/^([A-Z\s-]+(?:\s*-\s*[A-Z\s]+)?)\s*\((\d{4})\)\s*(.*)$/);
   if (plaatsMatch) {
     plaats = plaatsMatch[1].trim();
     postcode = plaatsMatch[2];
     adres = plaatsMatch[3].trim();
-    console.log('Found plaats:', plaats, 'postcode:', postcode, 'adres:', adres);
   }
   
-  // Zoek door alle lijnen
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
-    // Zoek datum (za 5 jul 2025)
     const datumMatch = line.match(/^(ma|di|wo|do|vr|za|zo)\s+(\d{1,2})\s+(\w+)\s+(\d{4})$/i);
     if (datumMatch) {
       const [, , dag, maand, jaar] = datumMatch;
       datum = parseDutchDate(`${dag} ${maand} ${jaar}`);
-      console.log('Found datum:', datum, 'from line:', line);
       continue;
     }
     
-    // Zoek tijd (9:00 - 16:00)
     const tijdMatch = line.match(/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/);
     if (tijdMatch) {
       const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
       startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
       eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
-      console.log('Found tijd:', startTijd, '-', eindTijd);
       continue;
     }
     
-    // Zoek organisator en contact (regel met email of telefoon)
     if (line.includes('@') || line.includes('+32')) {
       const parts = line.split('-');
       if (parts.length >= 2) {
@@ -1107,19 +880,16 @@ function parseMarketBlock(block) {
       continue;
     }
     
-    // Zoek standgeld
     const standgeldMatch = line.match(/standplaats\s*([\d,]+)\s*€/i);
     if (standgeldMatch) {
       standgeld = parseFloat(standgeldMatch[1].replace(',', '.'));
       continue;
     }
     
-    // Bepaal naam (lange regel die een titel lijkt)
     if (!naam && line.length > 5 && line.length < 80 && 
         !line.includes('http') && !line.includes('@') && 
         !line.includes('(') && !line.match(/^\d/)) {
       
-      // Skip sommige technische regels
       if (!line.toLowerCase().includes('opstellen') && 
           !line.toLowerCase().includes('ontruiming') &&
           !line.toLowerCase().includes('bekijk details')) {
@@ -1127,7 +897,6 @@ function parseMarketBlock(block) {
       }
     }
     
-    // Bepaal type op basis van inhoud
     const lowerLine = line.toLowerCase();
     if (lowerLine.includes('garage')) type = 'garageverkoop';
     if (lowerLine.includes('braderie')) type = 'braderie';
@@ -1136,12 +905,10 @@ function parseMarketBlock(block) {
     if (lowerLine.includes('feest')) type = 'feest';
   }
   
-  // Fallback voor naam
   if (!naam) {
     naam = `Rommelmarkt ${plaats}`;
   }
   
-  // Maak beschrijving van relevante regels
   beschrijving = lines.slice(1, 6)
     .filter(line => 
       !line.includes('@') && 
@@ -1154,10 +921,7 @@ function parseMarketBlock(block) {
     .join(' ')
     .substring(0, 200);
   
-  console.log('Final result - plaats:', plaats, 'datum:', datum);
-  
   if (!plaats || !datum) {
-    console.log('Onvoldoende data voor:', plaats, datum);
     return null;
   }
   
@@ -1180,104 +944,6 @@ function parseMarketBlock(block) {
   };
 }
 
-function parseMarketLine(line) {
-  // Basis regex patterns voor verschillende data formaten
-  const patterns = [
-    // Pattern: PLAATS (postcode) AdresType evenementDatum tijd Type evenement
-    /^([A-Z\s-]+)\s*\((\d{4})\)\s*([^A-Z]+?)([A-Z].*?)(\d{1,2}\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)|\d{1,2}\s+\w+\s+\d{4})\s+(\d{1,2}u\d{2}.*?)([A-Z].*?)$/i,
-    
-    // Pattern voor andere formaten
-    /^([A-Z\s-]+)\s*\((\d{4})\)\s*(.*?)(\d{1,2}\s+\w+\s+\d{4})\s+(.*?)$/i
-  ];
-  
-  // Probeer verschillende patterns
-  for (const pattern of patterns) {
-    const match = line.match(pattern);
-    if (match) {
-      return extractMarketInfo(match, line);
-    }
-  }
-  
-  // Fallback: probeer simpele extractie
-  return extractMarketInfoSimple(line);
-}
-
-function extractMarketInfo(match, originalLine) {
-  try {
-    const [, plaats, postcode, adres, naam, datumStr, tijdStr, type] = match;
-    
-    // Parse datum
-    const datum = parseDutchDate(datumStr);
-    if (!datum) return null;
-    
-    // Parse tijd
-    const { startTijd, eindTijd } = parseTijden(tijdStr);
-    
-    // Bepaal type
-    const evenementType = bepaalType(type || naam || originalLine);
-    
-    return {
-      naam: naam?.trim() || `Rommelmarkt ${plaats}`,
-      type: evenementType,
-      locatie: `${adres?.trim() || 'Centrum'}, ${postcode} ${plaats}`,
-      datumStart: Timestamp.fromDate(new Date(`${datum}T${startTijd || '09:00'}`)),
-      datumEind: eindTijd ? Timestamp.fromDate(new Date(`${datum}T${eindTijd}`)) : null,
-      beschrijving: `Automatisch geïmporteerd evenement in ${plaats}`,
-      organisator: '',
-      contact: '',
-      aantalStanden: null,
-      standgeld: null
-    };
-  } catch (error) {
-    console.warn('Fout bij extracten van marktinfo:', error);
-    return null;
-  }
-}
-
-function extractMarketInfoSimple(line) {
-  // Simpele fallback extractie
-  const words = line.split(/\s+/);
-  let plaats = '';
-  let postcode = '';
-  let datum = null;
-  
-  // Zoek postcode
-  for (let word of words) {
-    if (/^\(\d{4}\)$/.test(word)) {
-      postcode = word.replace(/[()]/g, '');
-      break;
-    }
-  }
-  
-  // Zoek plaats (woorden voor postcode)
-  const postcodeIndex = words.findIndex(w => w.includes(postcode));
-  if (postcodeIndex > 0) {
-    plaats = words.slice(0, postcodeIndex).join(' ').replace(/[^A-Za-z\s-]/g, '');
-  }
-  
-  // Zoek datum
-  const datePattern = /(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|\w+)\s+(\d{4})/i;
-  const dateMatch = line.match(datePattern);
-  if (dateMatch) {
-    datum = parseDutchDate(dateMatch[0]);
-  }
-  
-  if (!plaats || !datum) return null;
-  
-  return {
-    naam: `Rommelmarkt ${plaats}`,
-    type: 'rommelmarkt',
-    locatie: `Centrum, ${postcode} ${plaats}`,
-    datumStart: Timestamp.fromDate(new Date(`${datum}T09:00`)),
-    datumEind: null,
-    beschrijving: `Automatisch geïmporteerd evenement in ${plaats}`,
-    organisator: '',
-    contact: '',
-    aantalStanden: null,
-    standgeld: null
-  };
-}
-
 function parseDutchDate(dateStr) {
   const maanden = {
     'januari': '01', 'februari': '02', 'maart': '03', 'april': '04',
@@ -1288,7 +954,6 @@ function parseDutchDate(dateStr) {
     'okt': '10', 'nov': '11', 'dec': '12'
   };
   
-  // Pattern: "6 juli 2025" of "12 jul 2025"
   const match = dateStr.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
   if (match) {
     const [, dag, maand, jaar] = match;
@@ -1301,37 +966,9 @@ function parseDutchDate(dateStr) {
   return null;
 }
 
-function parseTijden(tijdStr) {
-  let startTijd = '09:00';
-  let eindTijd = null;
-  
-  // Pattern: "08u00 - 16u00" of "9:00 - 17:00"
-  const tijdMatch = tijdStr.match(/(\d{1,2})[u:](\d{2})(?:\s*-\s*(\d{1,2})[u:](\d{2}))?/);
-  if (tijdMatch) {
-    const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
-    startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
-    if (eindUur && eindMin) {
-      eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
-    }
-  }
-  
-  return { startTijd, eindTijd };
-}
-
-function bepaalType(text) {
-  const lowerText = text.toLowerCase();
-  
-  if (lowerText.includes('garage')) return 'garageverkoop';
-  if (lowerText.includes('braderie')) return 'braderie';
-  if (lowerText.includes('kermis')) return 'kermis';
-  if (lowerText.includes('boerenmarkt')) return 'boerenmarkt';
-  if (lowerText.includes('antiek') || lowerText.includes('brocante')) return 'antiekmarkt';
-  if (lowerText.includes('feest')) return 'feest';
-  
-  return 'rommelmarkt'; // default
-}
-
 function showImportResult(message, type) {
+  if (!importResults) return;
+  
   importResults.style.display = 'block';
   importResults.className = `import-results ${type}`;
   importResults.innerHTML = `

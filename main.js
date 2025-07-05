@@ -351,6 +351,8 @@ async function fetchMarkets(q){
     const map=new Map();
     snap.forEach(d=>{
       const m={id:d.id,...d.data()};
+      console.log('📄 Document data:', d.id, m);
+      console.log('📝 Fields:', Object.keys(m));
       const key=`${m.naam}-${m.locatie}-${dateFromFS(m.datumStart).toDateString()}`;
       map.has(key)||map.set(key,m);
     });

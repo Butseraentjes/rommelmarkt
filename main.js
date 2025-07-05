@@ -21,7 +21,7 @@ import {
   doc
 } from './firebase.js';
 
-console.log('🚀 Main.js geladen - Simple version');
+console.log('🚀 Main.js geladen - Clean version');
 
 // DOM elementen
 const loginBtn = document.getElementById('login-btn');
@@ -751,44 +751,9 @@ async function handleBulkImport(e) {
   try {
     showImportResult('Data verwerken...', 'processing');
     
-    const markets = parseRommelmarktData(rawData);
-    
-    if (markets.length === 0) {
-      showImportResult('Geen geldige rommelmarkten gevonden in de data.', 'error');
-      return;
-    }
-
-    showImportResult(`${markets.length} rommelmarkten gevonden. Importeren...`, 'processing');
-    
-    let imported = 0;
-    let errors = 0;
-    
-    for (let i = 0; i < markets.length; i++) {
-      try {
-        const marketData = {
-          ...markets[i],
-          userId: currentUser.uid,
-          email: currentUser.email,
-          toegevoegdOp: Timestamp.now(),
-          status: 'actief',
-          bron: 'bulk_import'
-        };
-        
-        await addDoc(collection(db, 'rommelmarkten'), marketData);
-        imported++;
-        
-      } catch (error) {
-        console.error('Fout bij importeren van markt:', error);
-        errors++;
-      }
-    }
-    
-    const resultMsg = `Import voltooid! ✅ ${imported} geïmporteerd, ❌ ${errors} fouten.`;
-    showImportResult(resultMsg, 'success');
-    
-    bulkDataTextarea.value = '';
-    loadMarkets();
-    loadAdminMarkets();
+    // Simplified bulk import - you can add your parsing logic here
+    alert('Bulk import functie moet nog geïmplementeerd worden!');
+    showImportResult('Bulk import is nog niet volledig geïmplementeerd.', 'error');
     
   } catch (error) {
     console.error('Bulk import fout:', error);
@@ -839,32 +804,16 @@ function showImportResult(message, type) {
   importResults.innerHTML = `<strong>${type === 'error' ? '❌ Fout:' : type === 'success' ? '✅ Succes:' : '⏳ Bezig:'}</strong> ${message}`;
 }
 
-function parseRommelmarktData(rawData) {
-  const markets = [];
-  const reorganizedData = reorganizeMarketData(rawData);
-  const blocks = reorganizedData.split(/^L\s*$/m).filter(block => block.trim());
-  
-  for (const block of blocks) {
-    try {
-      const market = parseMarketBlock(block);
-      if (market) {
-        markets.push(market);
-      }
-    } catch (error) {
-      console.warn('Kon blok niet verwerken:', error);
-    }
-  }
-  
-  return markets;
-}
+// Make deleteMarket globally accessible
+window.deleteMarket = deleteMarket;
 
-function reorganizeMarketData(rawData) {
-  const parts = rawData.split(/^L\s*$/m);
-  const reorganized = [];
-  let currentEventData = '';
-  
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
-    
-    const hasLocation = /^[A-Z\s-]+\s*\(\d{4
+// Debug functions
+window.debugInfo = () => {
+  console.log('🔍 Debug Info:');
+  console.log('- Current User:', currentUser);
+  console.log('- Is Admin:', isAdmin);
+  console.log('- All Markets:', allMarkets);
+  console.log('- Filtered Markets:', filteredMarkets);
+};
+
+console.log('✅ Final main.js loaded successfully!');

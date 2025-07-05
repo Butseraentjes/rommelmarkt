@@ -1,1 +1,60 @@
 
+<!-- event.html -->
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Evenement details</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="event-root" style="padding:4rem 1rem; max-width:800px; margin:auto;">
+    <!-- content wordt dynamisch geladen -->
+  </main>
+
+  <script type="module">
+    import { db, doc, getDoc, formatDate, formatTime, formatDateTime, eventTypes } from './firebase.js';
+
+    // helper om query-string te lezen
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    const root = document.getElementById('event-root');
+
+    if (!id) {
+      root.innerHTML = '<p>Geen evenement-ID opgegeven.</p>';
+      throw new Error('Missing id');
+    }
+
+    try {
+      const snap = await getDoc(doc(db, 'rommelmarkten', id));
+      if (!snap.exists()) {
+        root.innerHTML = '<p>Dit evenement bestaat niet (meer).</p>';
+        return;
+      }
+      const ev = snap.data();
+      const typeInfo = eventTypes[ev.type] || eventTypes.rommelmarkt;
+      const dt = formatDateTime(ev.datumStart);
+
+      root.innerHTML = `
+        <h1 style="margin-bottom:1rem;">${ev.naam}</h1>
+        <p><strong>${typeInfo.icon} ${typeInfo.label}</strong></p>
+        <p>📅 ${dt.fullDate} &nbsp; 🕑 ${dt.time}${ev.datumEind ? ' – '+formatTime(ev.datumEind) : ''}</p>
+        <p>📍 ${ev.locatie}</p>
+        ${ev.organisator ? `<p>👥 ${ev.organisator}</p>` : ''}
+        ${ev.aantalStanden ? `<p>🏪 ${ev.aantalStanden} standjes</p>` : ''}
+        ${ev.standgeld ? `<p>💶 €${ev.standgeld.toFixed(2)} per meter</p>` : ''}
+        ${ev.contact ? `<p>☎️ ${ev.contact}</p>` : ''}
+        <hr style="margin:2rem 0;">
+        <p>${(ev.beschrijving || 'Geen extra beschrijving.').replace(/\n/g,'<br>')}</p>
+        ${ev.imageUrl ? `<img src="${ev.imageUrl}" alt="${ev.naam}" style="max-width:100%;margin-top:2rem;border-radius:8px;">` : ''}
+        <p style="margin-top:2rem; font-size:.875rem; color:#666;">Toegevoegd op ${formatDate(ev.toegevoegdOp)}</p>
+        <p><a href="index.html">← Terug naar overzicht</a></p>
+      `;
+    } catch (err) {
+      console.error(err);
+      root.innerHTML = '<p>Fout bij laden van evenement.</p>';
+    }
+  </script>
+</body>
+</html>

@@ -1,4 +1,87 @@
-import { 
+function createGridView(market, eventType, dateTime, endTime) {
+  const hasImage = market.imageUrl && market.imageUrl !== '';
+  
+  return `
+    <div class="market-date-badge">
+      ${dateTime.dayMonth}
+    </div>
+    
+    ${isAdmin ? `
+      <div class="market-admin-controls">
+        <button onclick="deleteMarket('${market.id}')" class="btn-delete-market" title="Verwijder markt">
+          🗑️
+        </button>
+      </div>
+    ` : ''}
+    
+    ${hasImage ? `
+      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
+    ` : `
+      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 3rem;">
+        ${eventType.icon}
+      </div>
+    `}
+    
+    <div class="market-card-content">
+      <div class="market-type-badge ${eventType.color}">
+        ${eventType.icon} ${eventType.label}
+      </div>
+      
+      <h3>${escapeHtml(market.naam)}</h3>
+      
+      <div class="market-date-time">
+        📅 ${dateTime.dayName}
+        <br>
+        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+      </div>
+      
+      <div class="market-details-grid">
+        <div class="market-detail">
+          <span class="market-detail-icon">📍</span>
+          <span>${escapeHtml(market.locatie)}</span>
+        </div>
+        
+        ${market.organisator ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">👥</span>
+            <span>${escapeHtml(market.organisator)}</span>
+          </div>
+        ` : ''}
+        
+        ${market.aantalStanden ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">🏪</span>
+            <span>${market.aantalStanden} standjes</span>
+          </div>
+        ` : ''}
+        
+        ${market.standgeld ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">💰</span>
+            <span>€${market.standgeld.toFixed(2)} per meter</span>
+          </div>
+        ` : ''}
+        
+        ${market.contact ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">📞</span>
+            <span>${escapeHtml(market.contact)}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${market.beschrijving ? `
+        <div class="market-description">
+          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
+        </div>
+      ` : ''}
+    </div>
+    
+    <div class="market-footer">
+      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
+    </div>
+  `;
+}import { 
   auth, 
   provider, 
   db, 
@@ -29,6 +112,25 @@ const mainContent = document.getElementById('main-content');
 const userBar = document.getElementById('user-bar');
 const userEmail = document.getElementById('user-email');
 const marketForm = document.getElementById('market-form');
+const marketsContainer = document.getElementById('markets-container');
+const heroMarketsContainer = document.getElementById('hero-markets-container');
+const noMarketsDiv = document.getElementById('no-markets');
+const filterType = document.getElementById('filter-type');
+const filterLocation = document.getElementById('filter-location');
+const filterDate = document.getElementById('filter-date');
+const clearFiltersBtn = document.getElementById('clear-filters');
+const viewGridBtn = document.getElementById('view-grid');
+const viewListBtn = document.getElementById('view-list');
+const resultsCount = document.getElementById('results-count');
+const loadingMarketsDiv = document.getElementById('loading-markets');
+const loadMoreBtn = document.getElementById('load-more-btn');
+const loadMoreContainer = document.getElementById('load-more-container');
+const suggestEventBtn = document.getElementById('suggest-event');
+const totalMarketsSpan = document.getElementById('total-markets');
+const upcomingMarketsSpan = document.getElementById('upcoming-markets');
+const marketImageInput = document.getElementById('market-image');
+const imagePreview = document.getElementById('image-preview');
+const previewImg = document.getElementById('preview-img');
 const marketsContainer = document.getElementById('markets-container');
 const noMarketsDiv = document.getElementById('no-markets');
 const filterType = document.getElementById('filter-type');
@@ -72,6 +174,9 @@ function setupEventListeners() {
   if (loginBtn) loginBtn.addEventListener('click', handleLogin);
   if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
   if (marketForm) marketForm.addEventListener('submit', handleAddMarket);
+  
+  // Image upload listener
+  if (marketImageInput) marketImageInput.addEventListener('change', handleImageUpload);
   
   // Filter event listeners
   if (filterType) filterType.addEventListener('change', applyFilters);
@@ -215,8 +320,9 @@ async function handleAddMarket(e) {
     const marketData = prepareMarketData(formData);
     await addDoc(collection(db, 'rommelmarkten'), marketData);
     
-    showSuccessMessage('Evenement succesvol toegevoegd!');
+    showSuccessMessage('Geweldig evenement toegevoegd! 🎉');
     marketForm.reset();
+    removeImage(); // Clear image preview
     loadMarkets();
     
     document.getElementById('markten').scrollIntoView({ behavior: 'smooth' });
@@ -242,7 +348,8 @@ function getFormData() {
     aantalStanden: document.getElementById('market-stands').value,
     standgeld: document.getElementById('market-price').value,
     contact: document.getElementById('market-contact').value.trim(),
-    beschrijving: document.getElementById('market-description').value.trim()
+    beschrijving: document.getElementById('market-description').value.trim(),
+    imageFile: marketImageInput ? marketImageInput.files[0] : null
   };
 }
 
@@ -268,12 +375,22 @@ function validateFormData(data) {
   return { isValid: true };
 }
 
-function prepareMarketData(formData) {
+async function prepareMarketData(formData) {
   const startDateTime = new Date(`${formData.datum}T${formData.tijdStart}`);
   let endDateTime = null;
   
   if (formData.tijdEind) {
     endDateTime = new Date(`${formData.datum}T${formData.tijdEind}`);
+  }
+
+  let imageUrl = '';
+  if (formData.imageFile) {
+    try {
+      // Convert image to base64 for simple storage
+      imageUrl = await convertImageToBase64(formData.imageFile);
+    } catch (error) {
+      console.warn('Fout bij verwerken afbeelding:', error);
+    }
   }
 
   return {
@@ -289,6 +406,7 @@ function prepareMarketData(formData) {
     standgeld: formData.standgeld ? parseFloat(formData.standgeld) : null,
     contact: formData.contact || '',
     beschrijving: formData.beschrijving || '',
+    imageUrl: imageUrl,
     toegevoegdOp: Timestamp.now(),
     status: 'actief'
   };
@@ -339,6 +457,7 @@ async function loadMarketsPublic() {
     currentPage = 1;
     applyFilters();
     updateStats();
+    loadHeroMarkets(); // Load markets for hero section
 
     console.log('Publieke markten geladen (na duplicate filtering):', allMarkets.length);
 
@@ -412,6 +531,7 @@ async function loadMarkets() {
     currentPage = 1;
     applyFilters();
     updateStats();
+    loadHeroMarkets(); // Load markets for hero section
 
     // Debug logging
     console.log('Ingelogde gebruiker - markten geladen (na duplicate filtering):', allMarkets.length);
@@ -668,7 +788,17 @@ function createGridView(market, eventType, dateTime, endTime) {
 }
 
 function createListView(market, eventType, dateTime, endTime) {
+  const hasImage = market.imageUrl && market.imageUrl !== '';
+  
   return `
+    ${hasImage ? `
+      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
+    ` : `
+      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
+        ${eventType.icon}
+      </div>
+    `}
+    
     <div class="market-info">
       <div class="market-type-badge ${eventType.color}">
         ${eventType.icon} ${eventType.label}
@@ -690,6 +820,123 @@ function createListView(market, eventType, dateTime, endTime) {
       ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
     </div>
   `;
+}
+
+// Load markets for hero section
+function loadHeroMarkets() {
+  if (!heroMarketsContainer) return;
+  
+  // Get next 3 upcoming markets
+  const upcomingMarkets = allMarkets
+    .filter(market => market.datumStart.toDate() > new Date())
+    .slice(0, 3);
+  
+  heroMarketsContainer.innerHTML = '';
+  
+  if (upcomingMarkets.length === 0) {
+    heroMarketsContainer.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: rgba(255,255,255,0.8);">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">🎪</div>
+        <p>Binnenkort komen er nieuwe geweldige markten!</p>
+      </div>
+    `;
+    return;
+  }
+  
+  upcomingMarkets.forEach(market => {
+    const eventType = eventTypes[market.type] || eventTypes.rommelmarkt;
+    const dateTime = formatDateTime(market.datumStart);
+    const endTime = market.datumEind ? formatTime(market.datumEind) : null;
+    
+    const heroCard = document.createElement('div');
+    heroCard.className = 'market-card';
+    heroCard.style.cssText = 'background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);';
+    
+    const hasImage = market.imageUrl && market.imageUrl !== '';
+    
+    heroCard.innerHTML = `
+      ${hasImage ? `
+        <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" style="width: 100%; height: 150px; object-fit: cover; border-radius: 15px 15px 0 0;">
+      ` : `
+        <div style="width: 100%; height: 150px; background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 3rem; border-radius: 15px 15px 0 0;">
+          ${eventType.icon}
+        </div>
+      `}
+      
+      <div style="padding: 1.5rem;">
+        <div class="market-type-badge ${eventType.color}" style="margin-bottom: 1rem;">
+          ${eventType.icon} ${eventType.label}
+        </div>
+        <h3 style="color: white; margin-bottom: 1rem; font-size: 1.2rem;">${escapeHtml(market.naam)}</h3>
+        <div style="color: rgba(255,255,255,0.9); font-size: 0.9rem;">
+          📅 ${dateTime.dayName}<br>
+          🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}<br>
+          📍 ${escapeHtml(market.locatie)}
+        </div>
+      </div>
+    `;
+    
+    heroMarketsContainer.appendChild(heroCard);
+  });
+}
+
+// Image upload handling
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Check file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Bestand is te groot. Maximum 5MB toegestaan.');
+    event.target.value = '';
+    return;
+  }
+  
+  // Check file type
+  if (!file.type.startsWith('image/')) {
+    alert('Alleen afbeeldingen zijn toegestaan.');
+    event.target.value = '';
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    if (previewImg && imagePreview) {
+      previewImg.src = e.target.result;
+      imagePreview.style.display = 'block';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeImage() {
+  if (marketImageInput) marketImageInput.value = '';
+  if (imagePreview) imagePreview.style.display = 'none';
+  if (previewImg) previewImg.src = '';
+}
+
+// Get gradient colors for market types
+function getGradientForType(type) {
+  const gradients = {
+    rommelmarkt: '#48bb78, #38a169',
+    garageverkoop: '#ed8936, #dd6b20',
+    braderie: '#667eea, #764ba2',
+    kermis: '#e53e3e, #c53030',
+    boerenmarkt: '#38a169, #2f855a',
+    antiekmarkt: '#d69e2e, #b7791f',
+    feest: '#9f7aea, #805ad5'
+  };
+  return gradients[type] || gradients.rommelmarkt;
+}
+
+// Convert image to base64 for storage
+function convertImageToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function clearFilters() {

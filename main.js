@@ -10,7 +10,12 @@ import {
   getDocs,
   query,
   orderBy,
-  Timestamp
+  where,
+  Timestamp,
+  formatDate,
+  formatTime,
+  formatDateTime,
+  eventTypes
 } from './firebase.js';
 
 // DOM elementen
@@ -21,152 +26,446 @@ const mainContent = document.getElementById('main-content');
 const userEmail = document.getElementById('user-email');
 const marketForm = document.getElementById('market-form');
 const marketsContainer = document.getElementById('markets-container');
+const noMarketsDiv = document.getElementById('no-markets');
+const filterType = document.getElementById('filter-type');
+const filterLocation = document.getElementById('filter-location');
+const totalMarketsSpan = document.getElementById('total-markets');
+const upcomingMarketsSpan = document.getElementById('upcoming-markets');
 
-// Login functionaliteit
-loginBtn.addEventListener('click', async () => {
+// Global variables
+let allMarkets = [];
+let currentUser = null;
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  updateStats();
+});
+
+// Event listeners
+function setupEventListeners() {
+  loginBtn.addEventListener('click', handleLogin);
+  logoutBtn.addEventListener('click', handleLogout);
+  marketForm.addEventListener('submit', handleAddMarket);
+  filterType.addEventListener('change', filterMarkets);
+  filterLocation.addEventListener('input', debounce(filterMarkets, 300));
+  
+  // Smooth scrolling for navigation links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+}
+
+// Authentication functions
+async function handleLogin() {
   try {
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<span class="btn-icon">⏳</span> Inloggen...';
     await signInWithPopup(auth, provider);
   } catch (err) {
     console.error('Login fout:', err);
     alert('Er ging iets mis bij het inloggen. Probeer opnieuw.');
+    loginBtn.disabled = false;
+    loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
   }
-});
+}
 
-// Logout functionaliteit
-logoutBtn.addEventListener('click', async () => {
+async function handleLogout() {
   try {
     await signOut(auth);
   } catch (err) {
     console.error('Logout fout:', err);
   }
-});
+}
 
 // Auth state observer
 onAuthStateChanged(auth, (user) => {
+  currentUser = user;
   if (user) {
     loginContainer.style.display = 'none';
     mainContent.style.display = 'block';
-    userEmail.textContent = `Ingelogd als: ${user.email}`;
-    loadMarkets(); // Laad rommelmarkten wanneer gebruiker ingelogd is
+    userEmail.textContent = user.email;
+    loadMarkets();
   } else {
-    loginContainer.style.display = 'block';
+    loginContainer.style.display = 'flex';
     mainContent.style.display = 'none';
+    currentUser = null;
   }
 });
 
-// Rommelmarkt toevoegen
-marketForm.addEventListener('submit', async (e) => {
+// Market form handling
+async function handleAddMarket(e) {
   e.preventDefault();
   
-  const user = auth.currentUser;
-  if (!user) {
-    alert('Je moet ingelogd zijn om een rommelmarkt toe te voegen.');
+  if (!currentUser) {
+    alert('Je moet ingelogd zijn om een evenement toe te voegen.');
     return;
   }
 
-  // Haal formulier data op
-  const naam = document.getElementById('market-name').value.trim();
-  const locatie = document.getElementById('market-location').value.trim();
-  const datum = document.getElementById('market-date').value;
-  const tijd = document.getElementById('market-time').value;
-  const beschrijving = document.getElementById('market-description').value.trim();
-
-  // Validatie
-  if (!naam || !locatie || !datum || !tijd) {
-    alert('Vul alle verplichte velden in.');
-    return;
-  }
-
-  // Combineer datum en tijd
-  const dateTimeString = `${datum}T${tijd}`;
-  const marktDatum = new Date(dateTimeString);
-
-  // Check of datum in het verleden ligt
-  if (marktDatum < new Date()) {
-    alert('De datum kan niet in het verleden liggen.');
-    return;
-  }
-
-  const formData = {
-    userId: user.uid,
-    email: user.email,
-    naam: naam,
-    locatie: locatie,
-    datum: Timestamp.fromDate(marktDatum),
-    beschrijving: beschrijving || '',
-    toegevoegdOp: Timestamp.now()
-  };
-
+  const submitBtn = marketForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  
   try {
-    await addDoc(collection(db, 'rommelmarkten'), formData);
-    alert('Rommelmarkt succesvol toegevoegd!');
-    marketForm.reset();
-    loadMarkets(); // Herlaad de lijst
-  } catch (error) {
-    console.error('Fout bij toevoegen:', error);
-    alert('Er ging iets mis bij het toevoegen. Probeer opnieuw.');
-  }
-});
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="btn-icon">⏳</span> Toevoegen...';
 
-// Laad en toon rommelmarkten
-async function loadMarkets() {
-  try {
-    const q = query(
-      collection(db, 'rommelmarkten'),
-      orderBy('datum', 'asc')
-    );
+    // Haal formulier data op
+    const formData = getFormData();
     
-    const querySnapshot = await getDocs(q);
-    marketsContainer.innerHTML = '';
-
-    if (querySnapshot.empty) {
-      marketsContainer.innerHTML = '<p>Nog geen rommelmarkten toegevoegd.</p>';
+    // Validatie
+    const validation = validateFormData(formData);
+    if (!validation.isValid) {
+      alert(validation.message);
       return;
     }
 
-    querySnapshot.forEach((doc) => {
-      const market = doc.data();
-      const marketElement = createMarketCard(market);
-      marketsContainer.appendChild(marketElement);
-    });
+    // Bereid data voor database voor
+    const marketData = prepareMarketData(formData);
+
+    // Voeg toe aan database
+    await addDoc(collection(db, 'rommelmarkten'), marketData);
+    
+    // Success feedback
+    showSuccessMessage('Evenement succesvol toegevoegd!');
+    marketForm.reset();
+    loadMarkets();
+    
+    // Scroll naar markten sectie
+    document.getElementById('markten').scrollIntoView({ behavior: 'smooth' });
 
   } catch (error) {
-    console.error('Fout bij laden rommelmarkten:', error);
-    marketsContainer.innerHTML = '<p>Fout bij het laden van rommelmarkten.</p>';
+    console.error('Fout bij toevoegen:', error);
+    alert('Er ging iets mis bij het toevoegen. Probeer opnieuw.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
   }
 }
 
-// Maak een rommelmarkt kaart element
+function getFormData() {
+  return {
+    naam: document.getElementById('market-name').value.trim(),
+    type: document.getElementById('market-type').value,
+    locatie: document.getElementById('market-location').value.trim(),
+    organisator: document.getElementById('market-organizer').value.trim(),
+    datum: document.getElementById('market-date').value,
+    tijdStart: document.getElementById('market-time-start').value,
+    tijdEind: document.getElementById('market-time-end').value,
+    aantalStanden: document.getElementById('market-stands').value,
+    standgeld: document.getElementById('market-price').value,
+    contact: document.getElementById('market-contact').value.trim(),
+    beschrijving: document.getElementById('market-description').value.trim()
+  };
+}
+
+function validateFormData(data) {
+  if (!data.naam || !data.type || !data.locatie || !data.datum || !data.tijdStart) {
+    return { isValid: false, message: 'Vul alle verplichte velden in.' };
+  }
+
+  // Check datum
+  const startDateTime = new Date(`${data.datum}T${data.tijdStart}`);
+  const now = new Date();
+  
+  if (startDateTime < now) {
+    return { isValid: false, message: 'De datum en tijd kunnen niet in het verleden liggen.' };
+  }
+
+  // Check eindtijd
+  if (data.tijdEind) {
+    const endDateTime = new Date(`${data.datum}T${data.tijdEind}`);
+    if (endDateTime <= startDateTime) {
+      return { isValid: false, message: 'De eindtijd moet na de starttijd liggen.' };
+    }
+  }
+
+  return { isValid: true };
+}
+
+function prepareMarketData(formData) {
+  const startDateTime = new Date(`${formData.datum}T${formData.tijdStart}`);
+  let endDateTime = null;
+  
+  if (formData.tijdEind) {
+    endDateTime = new Date(`${formData.datum}T${formData.tijdEind}`);
+  }
+
+  return {
+    userId: currentUser.uid,
+    email: currentUser.email,
+    naam: formData.naam,
+    type: formData.type,
+    locatie: formData.locatie,
+    organisator: formData.organisator || '',
+    datumStart: Timestamp.fromDate(startDateTime),
+    datumEind: endDateTime ? Timestamp.fromDate(endDateTime) : null,
+    aantalStanden: formData.aantalStanden ? parseInt(formData.aantalStanden) : null,
+    standgeld: formData.standgeld ? parseFloat(formData.standgeld) : null,
+    contact: formData.contact || '',
+    beschrijving: formData.beschrijving || '',
+    toegevoegdOp: Timestamp.now(),
+    status: 'actief'
+  };
+}
+
+// Load and display markets
+async function loadMarkets() {
+  try {
+    showLoadingState();
+    
+    const q = query(
+      collection(db, 'rommelmarkten'),
+      where('status', '==', 'actief'),
+      orderBy('datumStart', 'asc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    allMarkets = [];
+
+    querySnapshot.forEach((doc) => {
+      const market = { id: doc.id, ...doc.data() };
+      
+      // Alleen toekomstige evenementen tonen
+      const now = new Date();
+      const marketDate = market.datumStart.toDate();
+      
+      if (marketDate > now) {
+        allMarkets.push(market);
+      }
+    });
+
+    displayMarkets(allMarkets);
+    updateStats();
+
+  } catch (error) {
+    console.error('Fout bij laden evenementen:', error);
+    showErrorState();
+  }
+}
+
+function displayMarkets(markets) {
+  marketsContainer.innerHTML = '';
+  
+  if (markets.length === 0) {
+    noMarketsDiv.style.display = 'block';
+    return;
+  }
+  
+  noMarketsDiv.style.display = 'none';
+  
+  markets.forEach(market => {
+    const marketElement = createMarketCard(market);
+    marketsContainer.appendChild(marketElement);
+  });
+}
+
 function createMarketCard(market) {
   const card = document.createElement('div');
   card.className = 'market-card';
-
-  // Converteer Firestore Timestamp naar JavaScript Date
-  const marktDatum = market.datum.toDate();
-  const toegevoegdOp = market.toegevoegdOp.toDate();
-
-  // Formateer datum en tijd
-  const datumFormatted = marktDatum.toLocaleDateString('nl-NL', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
   
-  const tijdFormatted = marktDatum.toLocaleTimeString('nl-NL', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-
-  const toegevoegdFormatted = toegevoegdOp.toLocaleDateString('nl-NL');
-
+  const eventType = eventTypes[market.type] || eventTypes.rommelmarkt;
+  const dateTime = formatDateTime(market.datumStart);
+  const endTime = market.datumEind ? formatTime(market.datumEind) : null;
+  
   card.innerHTML = `
-    <h4>${market.naam}</h4>
-    <div class="market-location">📍 ${market.locatie}</div>
-    <div class="market-datetime">🗓️ ${datumFormatted} om ${tijdFormatted}</div>
-    ${market.beschrijving ? `<div class="market-description">${market.beschrijving}</div>` : ''}
-    <div class="market-added-by">Toegevoegd door ${market.email} op ${toegevoegdFormatted}</div>
+    <div class="market-type-badge ${eventType.color}">
+      ${eventType.icon} ${eventType.label}
+    </div>
+    
+    <h3>${escapeHtml(market.naam)}</h3>
+    
+    <div class="market-date-time">
+      📅 ${dateTime.date}
+      <br>
+      🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+    </div>
+    
+    <div class="market-detail">
+      <span class="market-detail-icon">📍</span>
+      <span>${escapeHtml(market.locatie)}</span>
+    </div>
+    
+    ${market.organisator ? `
+      <div class="market-detail">
+        <span class="market-detail-icon">👥</span>
+        <span>${escapeHtml(market.organisator)}</span>
+      </div>
+    ` : ''}
+    
+    ${market.aantalStanden ? `
+      <div class="market-detail">
+        <span class="market-detail-icon">🏪</span>
+        <span>${market.aantalStanden} standjes</span>
+      </div>
+    ` : ''}
+    
+    ${market.standgeld ? `
+      <div class="market-detail">
+        <span class="market-detail-icon">💰</span>
+        <span>€${market.standgeld.toFixed(2)} per meter</span>
+      </div>
+    ` : ''}
+    
+    ${market.contact ? `
+      <div class="market-detail">
+        <span class="market-detail-icon">📞</span>
+        <span>${escapeHtml(market.contact)}</span>
+      </div>
+    ` : ''}
+    
+    ${market.beschrijving ? `
+      <div class="market-description">
+        ${escapeHtml(market.beschrijving)}
+      </div>
+    ` : ''}
+    
+    <div class="market-added-by">
+      Toegevoegd door ${escapeHtml(market.email)} op ${formatDate(market.toegevoegdOp)}
+    </div>
   `;
-
+  
   return card;
+}
+
+// Filter functions
+function filterMarkets() {
+  const typeFilter = filterType.value.toLowerCase();
+  const locationFilter = filterLocation.value.toLowerCase();
+  
+  let filteredMarkets = allMarkets;
+  
+  // Filter op type
+  if (typeFilter) {
+    filteredMarkets = filteredMarkets.filter(market => 
+      market.type === typeFilter
+    );
+  }
+  
+  // Filter op locatie
+  if (locationFilter) {
+    filteredMarkets = filteredMarkets.filter(market => 
+      market.locatie.toLowerCase().includes(locationFilter) ||
+      market.naam.toLowerCase().includes(locationFilter) ||
+      (market.organisator && market.organisator.toLowerCase().includes(locationFilter))
+    );
+  }
+  
+  displayMarkets(filteredMarkets);
+}
+
+// Utility functions
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function showLoadingState() {
+  marketsContainer.innerHTML = `
+    <div style="text-align: center; padding: 2rem; color: #718096;">
+      <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+      <p>Evenementen laden...</p>
+    </div>
+  `;
+  noMarketsDiv.style.display = 'none';
+}
+
+function showErrorState() {
+  marketsContainer.innerHTML = `
+    <div style="text-align: center; padding: 2rem; color: #e53e3e;">
+      <div style="font-size: 2rem; margin-bottom: 1rem;">❌</div>
+      <p>Fout bij het laden van evenementen. Probeer de pagina te verversen.</p>
+    </div>
+  `;
+  noMarketsDiv.style.display = 'none';
+}
+
+function showSuccessMessage(message) {
+  // Creer een tijdelijke success melding
+  const successDiv = document.createElement('div');
+  successDiv.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    font-weight: 500;
+  `;
+  successDiv.textContent = message;
+  
+  document.body.appendChild(successDiv);
+  
+  // Verwijder na 3 seconden
+  setTimeout(() => {
+    successDiv.remove();
+  }, 3000);
+}
+
+function updateStats() {
+  const now = new Date();
+  const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const thisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  
+  // Count markets this month
+  const thisMonthCount = allMarkets.filter(market => {
+    const marketDate = market.datumStart.toDate();
+    return marketDate >= now && marketDate <= thisMonth;
+  }).length;
+  
+  // Count markets next week
+  const nextWeekCount = allMarkets.filter(market => {
+    const marketDate = market.datumStart.toDate();
+    return marketDate >= now && marketDate <= nextWeek;
+  }).length;
+  
+  // Animate counters
+  animateCounter(totalMarketsSpan, thisMonthCount);
+  animateCounter(upcomingMarketsSpan, nextWeekCount);
+}
+
+function animateCounter(element, targetValue) {
+  const startValue = 0;
+  const duration = 1000;
+  const startTime = performance.now();
+  
+  function update(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    const currentValue = Math.round(startValue + (targetValue - startValue) * progress);
+    element.textContent = currentValue;
+    
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    }
+  }
+  
+  requestAnimationFrame(update);
 }

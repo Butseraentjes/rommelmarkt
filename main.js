@@ -442,7 +442,20 @@ function card(m){
 // ──────────────────────────────────────────────────────────────
 // 📊 Hero & stats
 // ──────────────────────────────────────────────────────────────
-function hero(){if(!$['heroMarketsContainer'])return;const up=allMarkets.filter(m=>dateFromFS(m.datumStart)>new Date()).slice(0,3);$['heroMarketsContainer'].innerHTML='';up.forEach(m=>{const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const c=document.createElement('a');c.className='market-card';c.href=`event.html?id=${m.id}`;c.innerHTML=`<div style="padding:12px;text-align:center;background:linear-gradient(135deg,${getGradient(m.type)});color:#fff;"><strong>${escapeHtml(m.naam || 'Onbekend evenement')}</strong><br><small>${formatDateTime(m.datumStart).dayName}</small><div style="font-size:1.5rem;margin-top:4px;">${evt.icon}</div></div>`;$['heroMarketsContainer'].appendChild(c);});}
+function hero(){if(!$['heroMarketsContainer'])return;const up=allMarkets.filter(m=>dateFromFS(m.datumStart)>new Date()).slice(0,3);$['heroMarketsContainer'].innerHTML='';up.forEach(m=>{const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const c=document.createElement('a');c.className='market-card';c.href=`event.html?id=${m.id}`;
+  
+  // Veilige datum formattering voor hero
+  let dayName = 'Datum onbekend';
+  try {
+    if (m.datumStart && typeof m.datumStart.toDate === 'function') {
+      const date = m.datumStart.toDate();
+      dayName = date.toLocaleDateString('nl-NL', { weekday: 'long' });
+    }
+  } catch (e) {
+    console.error('Error formatting hero date:', e);
+  }
+  
+  c.innerHTML=`<div style="padding:12px;text-align:center;background:linear-gradient(135deg,${getGradient(m.type)});color:#fff;"><strong>${escapeHtml(m.naam || 'Onbekend evenement')}</strong><br><small>${dayName}</small><div style="font-size:1.5rem;margin-top:4px;">${evt.icon}</div></div>`;$['heroMarketsContainer'].appendChild(c);});}
 
 function stats(){if(!$['totalMarkets']||!$['upcomingMarkets'])return;const now=new Date();const monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);const weekEnd=new Date(now);weekEnd.setDate(now.getDate()+7);const inMonth=allMarkets.filter(m=>{const d=dateFromFS(m.datumStart);return d>=now&&d<=monthEnd;}).length;const inWeek=allMarkets.filter(m=>{const d=dateFromFS(m.datumStart);return d>=now&&d<=weekEnd;}).length;counter($['totalMarkets'],inMonth);counter($['upcomingMarkets'],inWeek);}function counter(el,to){if(!el)return;const s=0,d=700,st=performance.now();const step=t=>{const p=Math.min((t-st)/d,1);el.textContent=Math.round(s+(to-s)*p);p<1&&requestAnimationFrame(step);};requestAnimationFrame(step);} 
 

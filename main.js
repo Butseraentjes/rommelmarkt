@@ -313,7 +313,7 @@ async function loadMarketsPublic() {
     }
     
     const querySnapshot = await getDocs(q);
-    allMarkets = [];
+    const marketsMap = new Map(); // Voor duplicate filtering
 
     querySnapshot.forEach((doc) => {
       const market = { id: doc.id, ...doc.data() };
@@ -322,9 +322,16 @@ async function loadMarketsPublic() {
       const isActive = !market.status || market.status === 'actief';
       
       if (isActive) {
-        allMarkets.push(market);
+        // Filter duplicates op basis van naam + locatie + datum
+        const uniqueKey = `${market.naam}-${market.locatie}-${market.datumStart.toDate().toDateString()}`;
+        
+        if (!marketsMap.has(uniqueKey)) {
+          marketsMap.set(uniqueKey, market);
+        }
       }
     });
+
+    allMarkets = Array.from(marketsMap.values());
 
     // Sorteer op datum (meest recente eerst voor debug)
     allMarkets.sort((a, b) => b.datumStart.toDate() - a.datumStart.toDate());
@@ -333,10 +340,7 @@ async function loadMarketsPublic() {
     applyFilters();
     updateStats();
 
-    console.log('Publieke markten geladen:', allMarkets.length);
-    allMarkets.forEach(market => {
-      console.log('Markt:', market.naam, 'Datum:', market.datumStart.toDate());
-    });
+    console.log('Publieke markten geladen (na duplicate filtering):', allMarkets.length);
 
   } catch (error) {
     console.error('Fout bij laden publieke evenementen:', error);
@@ -365,7 +369,7 @@ async function loadMarkets() {
     }
     
     const querySnapshot = await getDocs(q);
-    allMarkets = [];
+    const marketsMap = new Map(); // Voor duplicate filtering
 
     querySnapshot.forEach((doc) => {
       const market = { id: doc.id, ...doc.data() };
@@ -379,9 +383,18 @@ async function loadMarkets() {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       
       if (isActive && marketDate > thirtyDaysAgo) {
-        allMarkets.push(market);
+        // Filter duplicates op basis van naam + locatie + datum
+        const uniqueKey = `${market.naam}-${market.locatie}-${market.datumStart.toDate().toDateString()}`;
+        
+        if (!marketsMap.has(uniqueKey)) {
+          marketsMap.set(uniqueKey, market);
+        } else {
+          console.log('Duplicate gevonden en geskipt:', market.naam);
+        }
       }
     });
+
+    allMarkets = Array.from(marketsMap.values());
 
     // Sorteer op datum (toekomstige eerst, dan verleden)
     allMarkets.sort((a, b) => {
@@ -401,7 +414,7 @@ async function loadMarkets() {
     updateStats();
 
     // Debug logging
-    console.log('Ingelogde gebruiker - markten geladen:', allMarkets.length);
+    console.log('Ingelogde gebruiker - markten geladen (na duplicate filtering):', allMarkets.length);
     allMarkets.forEach(market => {
       const isFuture = market.datumStart.toDate() > new Date() ? '(TOEKOMST)' : '(VERLEDEN)';
       console.log('Markt:', market.naam, 'Datum:', market.datumStart.toDate(), isFuture);
@@ -588,6 +601,14 @@ function createGridView(market, eventType, dateTime, endTime) {
       ${eventType.icon} ${eventType.label}
     </div>
     
+    ${isAdmin ? `
+      <div class="market-admin-controls">
+        <button onclick="deleteMarket('${market.id}')" class="btn-delete-market" title="Verwijder markt">
+          🗑️
+        </button>
+      </div>
+    ` : ''}
+    
     <div class="market-card-content">
       <h3>${escapeHtml(market.naam)}</h3>
       
@@ -641,6 +662,7 @@ function createGridView(market, eventType, dateTime, endTime) {
     
     <div class="market-added-by">
       Toegevoegd op ${formatDate(market.toegevoegdOp)}
+      ${isAdmin ? ` (ID: ${market.id.substring(0, 8)}...)` : ''}
     </div>
   `;
 }
@@ -1110,3 +1132,42 @@ async function handleClearAll() {
     showImportResult(`Fout bij verwijderen: ${error.message}`, 'error');
   }
 }
+
+// Delete individual market (admin only)
+async function deleteMarket(marketId) {
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const market = allMarkets.find(m => m.id === marketId);
+  if (!market) {
+    alert('Markt niet gevonden.');
+    return;
+  }
+
+  const confirmed = confirm(`Weet je zeker dat je "${market.naam}" wilt verwijderen?`);
+  if (!confirmed) return;
+
+  try {
+    await deleteDoc(doc(db, 'rommelmarkten', marketId));
+    
+    showSuccessMessage('Markt succesvol verwijderd!');
+    
+    // Remove from local array
+    allMarkets = allMarkets.filter(m => m.id !== marketId);
+    
+    // Refresh display
+    applyFilters();
+    updateStats();
+    
+    console.log('Markt verwijderd:', market.naam);
+    
+  } catch (error) {
+    console.error('Fout bij verwijderen van markt:', error);
+    alert('Er ging iets mis bij het verwijderen. Probeer opnieuw.');
+  }
+}
+
+// Make deleteMarket globally accessible
+window.deleteMarket = deleteMarket;

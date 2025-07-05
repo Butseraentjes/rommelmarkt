@@ -83,7 +83,7 @@ onAuthStateChanged(auth,u=>{currentUser=u;isAdmin=!!u&&adminEmails.includes(u.em
 // ──────────────────────────────────────────────────────────────
 async function loadMarketsPublic(){hasInitializedMarkets=true;await genericLoadMarkets(true);}async function loadMarkets(){hasInitializedMarkets=true;await genericLoadMarkets(false);} 
 
-async function genericLoadMarkets(isPublic){try{showLoadingState();const base=[collection(db,MARKET_COLLECTION)];if(!isPublic)base.push(where('status','==','actief'));const q=query(...base,orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){// index ontbreekt
+async function genericLoadMarkets(isPublic){try{showLoadingState();const base=[collection(db,MARKET_COLLECTION)];const q=query(...base,orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){// index ontbreekt
     log('⚠️ Index ontbreekt – fallback op toegevoegdOp');const q2=query(collection(db,MARKET_COLLECTION),orderBy('toegevoegdOp','desc'));await fetchAndProcess(q2);}else{log(e);showErrorState();}}
 }
 

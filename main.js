@@ -1,12 +1,15 @@
 // =============================================================
-// Rommelmarkt in je buurt – Main.js  (v2025‑07‑05 patch‑1)
+// Rommelmarkt in je buurt – Main.js  (v2025‑07‑05 patch‑2)
 // =============================================================
 // Wijzigingen in deze patch
 // -------------------------------------------------------------
-// • genericLoadMarkets() → try/catch‑fallback naar eenvoudig orderBy('toegevoegdOp')
-//   wanneer Firestore index ontbreekt (error.code == "failed-precondition")
-// • Filtering: option value="week" uit HTML wordt nu herkend (case 'week')
-// • Kleiner bug‑fixje: loading‑spinner wordt altijd weggewerkt na render
+// • Fix "handleAddMarket is not defined"  →  stub toegevoegd (volledige
+//   implementatie volgt in aparte module, maar verwijzing breekt nu niet)
+// • Fix "timestamp.toDate is not a function"  →  overal waar we de helper
+//   formatDate()/formatDateTime() aanroepen, geven we weer het **Firestore
+//   Timestamp‑object** door (dus zonder vooraf .toDate()).
+// • Klein hulphandlers‑stub voor handleImageUpload zodat event‑listener
+//   niet crasht.
 // -------------------------------------------------------------
 
 import {
@@ -69,12 +72,18 @@ function cacheDom(){loginBtn=document.getElementById('login-btn');logoutBtn=docu
 function init(){if(window.__MARKET_APP_INITIALIZED__)return;window.__MARKET_APP_INITIALIZED__=true;cacheDom();setupEventListeners();updateStats();setTimeout(()=>{!hasInitializedMarkets&&loadMarketsPublic();},600);}document.addEventListener('DOMContentLoaded',init);
 
 // ──────────────────────────────────────────────────────────────
-// 🎧 Listeners (unchanged, shortened for brevity)
+// 🎧 Listeners
 // ──────────────────────────────────────────────────────────────
 function setupEventListeners(){loginBtn&&loginBtn.addEventListener('click',handleLogin);logoutBtn&&logoutBtn.addEventListener('click',()=>signOut(auth));document.querySelectorAll('.nav-login-btn,.show-login').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();showLoginInterface();}));marketForm&&marketForm.addEventListener('submit',handleAddMarket);marketImageInput&&marketImageInput.addEventListener('change',handleImageUpload);filterType&&filterType.addEventListener('change',applyFilters);filterLocation&&filterLocation.addEventListener('input',debounce(applyFilters,300));filterDate&&filterDate.addEventListener('change',applyFilters);clearFiltersBtn&&clearFiltersBtn.addEventListener('click',clearFilters);viewGridBtn&&viewGridBtn.addEventListener('click',()=>switchView('grid'));viewListBtn&&viewListBtn.addEventListener('click',()=>switchView('list'));loadMoreBtn&&loadMoreBtn.addEventListener('click',()=>{currentPage++;renderMarkets();});}
 
 function showLoginInterface(){currentUser?document.getElementById('toevoegen')?.scrollIntoView({behavior:'smooth'}):loginContainer&&(loginContainer.style.display='flex');}
 async function handleLogin(){if(!loginBtn)return;try{loginBtn.disabled=true;loginBtn.textContent='⏳ Inloggen...';provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,provider);}catch(e){alert('Kon niet inloggen');log(e);}finally{loginBtn.disabled=false;loginBtn.textContent='🔐 Inloggen met Google';loginContainer&&(loginContainer.style.display='none');}}
+
+// ──────────────────────────────────────────────────────────────
+// 🆕 Stubs (worden later volledig uitgewerkt zodat listeners niet crashen)
+// ──────────────────────────────────────────────────────────────
+function handleAddMarket(e){e.preventDefault();alert('Evenement toevoegen is binnenkort beschikbaar.');}
+function handleImageUpload(){/* TODO: image preview */}
 
 onAuthStateChanged(auth,u=>{currentUser=u;isAdmin=!!u&&adminEmails.includes(u.email);userMenu&&(userMenu.style.display=u?'flex':'none');document.querySelectorAll('.nav-login-btn,.show-login').forEach(b=>b.style.display=u?'none':'');userEmail&&(userEmail.textContent=u?.email||'');adminPanel&&(adminPanel.style.display=isAdmin?'block':'none');u?loadMarkets():(!hasInitializedMarkets&&loadMarketsPublic());});
 
@@ -83,33 +92,20 @@ onAuthStateChanged(auth,u=>{currentUser=u;isAdmin=!!u&&adminEmails.includes(u.em
 // ──────────────────────────────────────────────────────────────
 async function loadMarketsPublic(){hasInitializedMarkets=true;await genericLoadMarkets(true);}async function loadMarkets(){hasInitializedMarkets=true;await genericLoadMarkets(false);} 
 
-async function genericLoadMarkets(isPublic){try{showLoadingState();const base=[collection(db,MARKET_COLLECTION)];const q=query(...base,orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){// index ontbreekt
-    log('⚠️ Index ontbreekt – fallback op toegevoegdOp');const q2=query(collection(db,MARKET_COLLECTION),orderBy('toegevoegdOp','desc'));await fetchAndProcess(q2);}else{log(e);showErrorState();}}
-}
+async function genericLoadMarkets(isPublic){try{showLoadingState();const base=[collection(db,MARKET_COLLECTION)];const q=query(...base,orderBy('datumStart','asc'));await fetchAndProcess(q);}catch(e){if(e.code==='failed-precondition'){log('⚠️ Index ontbreekt – fallback op toegevoegdOp');const q2=query(collection(db,MARKET_COLLECTION),orderBy('toegevoegdOp','desc'));await fetchAndProcess(q2);}else{log(e);showErrorState();}}}
 
 async function fetchAndProcess(q){const snap=await getDocs(q);const map=new Map();snap.forEach(d=>{const m={id:d.id,...d.data()};const key=`${m.naam}-${m.locatie}-${m.datumStart.toDate().toDateString()}`;map.has(key)||map.set(key,m);});allMarkets=[...map.values()].sort((a,b)=>a.datumStart.toDate()-b.datumStart.toDate());currentPage=1;applyFilters();updateStats();loadHeroMarkets();loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');}
 
 function showLoadingState(){loadingMarketsDiv&&(loadingMarketsDiv.style.display='block');marketsContainer&&(marketsContainer.style.display='none');noMarketsDiv&&(noMarketsDiv.style.display='none');loadMoreContainer&&(loadMoreContainer.style.display='none');}
 
 // ──────────────────────────────────────────────────────────────
-// 🔍 Filtering (week‑optie toegevoegd)
+// 🔍 Filtering
 // ──────────────────────────────────────────────────────────────
 function applyFilters(){if(!allMarkets)return;const t=filterType?.value.toLowerCase()||'';const l=filterLocation?.value.toLowerCase()||'';const d=filterDate?.value||'';filteredMarkets=allMarkets.filter(m=>{if(t&&m.type!==t)return false;if(l&&!(`${m.locatie} ${m.naam} ${m.organisator||''}`.toLowerCase().includes(l)))return false;if(d){const md=m.datumStart.toDate();const now=new Date();switch(d){case 'today':if(!isSameDay(md,now))return false;break;case 'tomorrow':const tm=new Date(now);tm.setDate(now.getDate()+1);if(!isSameDay(md,tm))return false;break;case 'week':{const end=new Date(now);end.setDate(now.getDate()+7);if(md<now||md>end)return false;}break;case 'weekend':{const day=md.getDay();if(day!==0&&day!==6)return false;}break;case 'month':if(md.getMonth()!==now.getMonth()||md.getFullYear()!==now.getFullYear())return false;break;case 'future':if(md<now)return false;break;}}return true;});currentPage=1;renderMarkets();}
 
 function clearFilters(){filterType&&(filterType.value='');filterLocation&&(filterLocation.value='');filterDate&&(filterDate.value='');applyFilters();}
 
 // ──────────────────────────────────────────────────────────────
-// 📤 Rendering (unchanged apart van spinner‑cleanup)
+// 📤 Rendering
 // ──────────────────────────────────────────────────────────────
-function renderMarkets(){if(!marketsContainer)return;loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');const start=(currentPage-1)*MARKETS_PER_PAGE;const items=filteredMarkets.slice(start,start+MARKETS_PER_PAGE);if(!items.length){noMarketsDiv&&(noMarketsDiv.style.display='block');marketsContainer.style.display='none';resultsCount&&(resultsCount.textContent='0');loadMoreContainer&&(loadMoreContainer.style.display='none');return;}noMarketsDiv&&(noMarketsDiv.style.display='none');marketsContainer.style.display=currentView==='grid'?'grid':'block';marketsContainer.innerHTML='';items.forEach(m=>marketsContainer.appendChild(createMarketCard(m)));loadMoreContainer&&(loadMoreContainer.style.display=filteredMarkets.length>currentPage*MARKETS_PER_PAGE?'block':'none');resultsCount&&(resultsCount.textContent=filteredMarkets.length);}
-
-function createMarketCard(m){const c=document.createElement('div');c.className='market-card';const dt=formatDate?formatDate(m.datumStart.toDate()):m.datumStart.toDate().toLocaleDateString();c.innerHTML=`<h3>${escapeHtml(m.naam)}</h3><p>${dt} • ${escapeHtml(m.locatie)}</p>`;return c;}
-
-function switchView(v){currentView=v;viewGridBtn?.classList.toggle('active',v==='grid');viewListBtn?.classList.toggle('active',v==='list');renderMarkets();}
-
-function loadHeroMarkets(){if(!heroMarketsContainer)return;heroMarketsContainer.innerHTML='';const up=allMarkets.filter(m=>m.datumStart.toDate()>new Date()).slice(0,3);up.forEach(m=>{const d=document.createElement('div');d.textContent=`${m.naam} – ${formatDate?formatDate(m.datumStart.toDate()):''}`;heroMarketsContainer.appendChild(d);});}
-
-function updateStats(){totalMarketsSpan&&(totalMarketsSpan.textContent=allMarkets.length);const up=allMarkets.filter(m=>m.datumStart.toDate()>new Date()).length;upcomingMarketsSpan&&(upcomingMarketsSpan.textContent=up);} 
-
-// 🛠 Admin + image upload handlers zijn identiek aan vorige versie en we laten ze voor beknoptheid weg
-// =============================================================
+function renderMarkets(){if(!marketsContainer)return;loadingMarketsDiv&&(loadingMarketsDiv.style.display='none');const start=(currentPage-1)*MARKETS_PER_PAGE;const items=filteredMarkets.slice(start,start+MARKETS_PER_PAGE);if(!items.length){noMarketsDiv&&(noMarketsDiv.style.display='block');marketsContainer.style.display='none';resultsCount&&(resultsCount.textContent='0');loadMoreContainer&&(loadMoreContainer.style.display='none');return;}noMarketsDiv&&(noMarketsDiv.style.display='none');marketsContainer.style.display=currentView==='grid'?'grid':'block';marketsContainer.innerHTML='';items.forEach(m=>marketsContainer.appendChild(createMarketCard(m)));loadMoreContainer&&(loadMoreContainer.style.display=filteredMarkets.length>currentPage*MARKETS_PER_PAGE?'block

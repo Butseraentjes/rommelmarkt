@@ -214,36 +214,69 @@ onAuthStateChanged(auth, (user) => {
     // User is logged in
     console.log('✅ User logged in, showing main content');
     
-    if (loginContainer) loginContainer.style.display = 'none';
-    if (mainContent) mainContent.style.display = 'block';
-    if (userBar) userBar.style.display = 'block';
-    if (userEmail) userEmail.textContent = user.email;
+    if (loginContainer) {
+      loginContainer.style.display = 'none';
+      console.log('🚫 Login container hidden');
+    }
+    if (mainContent) {
+      mainContent.style.display = 'block';
+      console.log('✅ Main content shown');
+    }
+    if (userBar) {
+      userBar.style.display = 'block';
+      console.log('👤 User bar shown');
+    }
+    if (userEmail) {
+      userEmail.textContent = user.email;
+      console.log('📧 User email set:', user.email);
+    }
     
     // Check if user is admin
     isAdmin = adminEmails.includes(user.email);
     console.log('👑 Admin status:', isAdmin);
     
-    if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
+    if (adminPanel) {
+      adminPanel.style.display = isAdmin ? 'block' : 'none';
+      console.log('🔧 Admin panel:', isAdmin ? 'shown' : 'hidden');
+    }
     
     // Show all sections for logged in users
     const toevoegenSection = document.getElementById('toevoegen');
-    if (toevoegenSection) toevoegenSection.style.display = 'block';
+    if (toevoegenSection) {
+      toevoegenSection.style.display = 'block';
+      console.log('➕ Toevoegen section shown');
+    }
     
     loadMarkets();
   } else {
     // User is logged out
     console.log('👤 User logged out, showing login');
     
-    if (loginContainer) loginContainer.style.display = 'flex';
-    if (mainContent) mainContent.style.display = 'block'; // Still show main content
-    if (userBar) userBar.style.display = 'none'; // Hide user bar
+    if (loginContainer) {
+      loginContainer.style.display = 'flex';
+      console.log('🔐 Login container shown');
+    }
+    if (mainContent) {
+      mainContent.style.display = 'block'; // Still show main content
+      console.log('📄 Main content kept visible');
+    }
+    if (userBar) {
+      userBar.style.display = 'none'; // Hide user bar
+      console.log('🚫 User bar hidden');
+    }
     
     // Hide admin and add sections for logged out users
     const toevoegenSection = document.getElementById('toevoegen');
     const adminSection = document.getElementById('admin-panel');
     
-    if (toevoegenSection) toevoegenSection.style.display = 'none';
-    if (adminSection) adminSection.style.display = 'none';
+    if (toevoegenSection) {
+      toevoegenSection.style.display = 'none';
+      console.log('🚫 Toevoegen section hidden');
+    }
+    if (adminSection) {
+      adminSection.style.display = 'none';
+      console.log('🚫 Admin section hidden');
+    }
     
     currentUser = null;
     isAdmin = false;
@@ -1387,7 +1420,42 @@ if (typeof window !== 'undefined') {
   window.deleteMarket = deleteMarket;
 }
 
-// Make removeImage globally accessible
-if (typeof window !== 'undefined') {
-  window.removeImage = removeImage;
+// Manual override function to force UI update
+function forceUIUpdate() {
+  console.log('🔧 Force UI update triggered');
+  
+  if (currentUser) {
+    console.log('👤 Current user exists, forcing logged-in state');
+    
+    // Force hide login
+    if (loginContainer) {
+      loginContainer.style.display = 'none !important';
+      loginContainer.style.visibility = 'hidden';
+      loginContainer.classList.add('hidden');
+    }
+    
+    // Force show main content  
+    if (mainContent) {
+      mainContent.style.display = 'block !important';
+      mainContent.style.visibility = 'visible';
+      mainContent.classList.remove('hidden');
+    }
+    
+    // Force show user bar
+    if (userBar) {
+      userBar.style.display = 'block !important';
+      userBar.style.visibility = 'visible';
+    }
+    
+    console.log('✅ UI force update complete');
+  }
 }
+
+// Call this after a delay to ensure auth state is processed
+setTimeout(() => {
+  console.log('⏰ Delayed UI check...');
+  if (currentUser) {
+    console.log('👤 User found after delay, forcing UI update');
+    forceUIUpdate();
+  }
+}, 1000);

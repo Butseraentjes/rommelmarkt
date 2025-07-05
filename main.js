@@ -80,14 +80,20 @@ let marketsPerPage = 12;
 let currentPage = 1;
 
 // Initialize app
+let hasInitializedMarkets = false;
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🎯 DOM Content Loaded!');
   setupEventListeners();
   updateStats();
   
-  // Start with public view - auth state will be handled by onAuthStateChanged
-  console.log('🌍 Loading public markets...');
-  loadMarketsPublic();
+  // Wait a bit for auth state, then load if not yet loaded
+  setTimeout(() => {
+    if (!hasInitializedMarkets) {
+      console.log('🌍 Loading public markets (no auth detected)...');
+      loadMarketsPublic();
+    }
+  }, 1000);
 });
 
 // Also run immediately in case DOM is already loaded
@@ -97,7 +103,14 @@ if (document.readyState === 'loading') {
   console.log('📄 Document already loaded, initializing...');
   setupEventListeners();
   updateStats();
-  loadMarketsPublic();
+  
+  // Wait a bit for auth state, then load if not yet loaded
+  setTimeout(() => {
+    if (!hasInitializedMarkets) {
+      console.log('🌍 Loading public markets (no auth detected)...');
+      loadMarketsPublic();
+    }
+  }, 1000);
 }
 
 // Event listeners
@@ -447,6 +460,7 @@ async function prepareMarketData(formData) {
 // DEBUG VERSION - Load markets for public viewing (when not logged in)
 async function loadMarketsPublic() {
   console.log('🚀 loadMarketsPublic gestart');
+  hasInitializedMarkets = true;
   
   try {
     showLoadingState();
@@ -581,6 +595,9 @@ async function loadMarketsPublic() {
 
 // Load and display markets
 async function loadMarkets() {
+  console.log('🔄 loadMarkets called (authenticated user)');
+  hasInitializedMarkets = true;
+  
   try {
     showLoadingState();
     

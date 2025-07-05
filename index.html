@@ -3,380 +3,191 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rommelmarkt-in-je-buurt - Ontdek lokale schatten</title>
-  <meta name="description" content="Vind de beste rommelmarkten, garageverkopen en feesten in je buurt. Ontdek unieke schatten en gezellige evenementen.">
+  <title>Rommelmarkten in je buurt</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <!-- Header -->
-  <header class="header">
+  <header>
     <div class="container">
-      <div class="logo">
-        <span class="logo-icon">🏪</span>
-        <span class="logo-text">Rommelmarkt-in-je-buurt</span>
+      <div class="header-content">
+        <div class="logo">Rommelmarkten</div>
+        <nav>
+          <a href="#home" class="active">Home</a>
+          <a href="#markets">Markten</a>
+          <a href="#add">Toevoegen</a>
+          <button id="login-btn" class="btn btn-outline">Inloggen</button>
+        </nav>
       </div>
-      <nav class="nav">
-        <a href="#hero" class="nav-link">Home</a>
-        <a href="#markten" class="nav-link">Markten</a>
-        <a href="#toevoegen" class="nav-link nav-login-btn">Toevoegen</a>
-        <button class="nav-login-btn btn btn-primary btn-small">
-          <span class="btn-icon">🔐</span>
-          Inloggen
-        </button>
-      </nav>
     </div>
   </header>
 
-  <!-- Hero Section with Integrated Markets -->
-  <section id="hero" class="hero">
-    <div class="hero-background">
-      <div class="hero-pattern"></div>
-    </div>
-    
+  <!-- Hero Section -->
+  <section id="home" class="hero">
     <div class="container">
-      <div class="hero-content">
-        <h1 class="hero-title">Ontdek schatten in je buurt! 💎</h1>
-        <p class="hero-subtitle">Van rommelmarkten tot garageverkopen - vind de leukste koopjes en gezelligste evenementen bij jou in de buurt</p>
-        
-        <div class="hero-stats">
-          <div class="stat-card">
-            <span class="stat-number" id="total-markets">0</span>
-            <span class="stat-label">Markten deze maand</span>
-            <span class="stat-icon">📅</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-number" id="upcoming-markets">0</span>
-            <span class="stat-label">Komende week</span>
-            <span class="stat-icon">⏰</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-number">7</span>
-            <span class="stat-label">Verschillende types</span>
-            <span class="stat-icon">🎪</span>
-          </div>
+      <div class="hero-date">Augustus 2025</div>
+      <h1>Rommelmarkten in je buurt</h1>
+      <p>Ontdek lokale rommelmarkten, garageverkopen en braderieën. Vind unieke schatten en leuke koopjes.</p>
+      <a href="#markets" class="btn">Bekijk markten</a>
+    </div>
+  </section>
+
+  <!-- Markets Section -->
+  <section id="markets" class="markets">
+    <div class="container">
+      <div class="section-header">
+        <h2>Komende evenementen</h2>
+        <p>Ontdek alle rommelmarkten en evenementen in de regio</p>
+      </div>
+
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label for="filter-type">Type</label>
+          <select id="filter-type">
+            <option value="">Alle types</option>
+            <option value="rommelmarkt">Rommelmarkt</option>
+            <option value="garageverkoop">Garageverkoop</option>
+            <option value="braderie">Braderie</option>
+            <option value="kermis">Kermis</option>
+            <option value="boerenmarkt">Boerenmarkt</option>
+            <option value="antiekmarkt">Antiekmarkt</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filter-location">Locatie</label>
+          <input type="text" id="filter-location" placeholder="Stad of postcode">
+        </div>
+        <div class="filter-group">
+          <label for="filter-date">Wanneer</label>
+          <select id="filter-date">
+            <option value="">Alle data</option>
+            <option value="today">Vandaag</option>
+            <option value="week">Deze week</option>
+            <option value="month">Deze maand</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <button id="clear-filters" class="btn btn-outline">Reset</button>
         </div>
       </div>
-      
-      <!-- Quick Market Preview -->
-      <div class="hero-markets-preview">
-        <h2>🔥 Populaire markten deze week</h2>
-        <div id="hero-markets-container" class="hero-markets-grid">
-          <!-- Markets will be loaded here -->
-        </div>
-        <div class="hero-actions">
-          <a href="#markten" class="btn btn-primary btn-large">
-            <span class="btn-icon">🔍</span>
-            Alle markten bekijken
-          </a>
-          <button class="btn btn-secondary btn-large show-login">
-            <span class="btn-icon">➕</span>
-            Markt toevoegen
-          </button>
-        </div>
+
+      <!-- Loading -->
+      <div id="loading" class="loading hidden">
+        <p>Evenementen laden...</p>
+      </div>
+
+      <!-- Market Grid -->
+      <div class="market-grid" id="market-grid">
+        <!-- Markets will be loaded here -->
+      </div>
+
+      <!-- No markets message -->
+      <div id="no-markets" class="no-markets hidden">
+        <h3>Geen evenementen gevonden</h3>
+        <p>Probeer andere filters of voeg zelf een evenement toe.</p>
       </div>
     </div>
   </section>
 
-  <!-- Login Section -->
-  <div id="login-container" class="login-section" style="display: none;">
-    <div class="login-card">
-      <div class="login-icon">🔐</div>
-      <h2>Welkom terug!</h2>
-      <p>Log in om markten toe te voegen en te beheren</p>
-      <button id="login-btn" class="btn btn-primary btn-large">
-        <span class="btn-icon">🚀</span>
-        Inloggen met Google
-      </button>
-      <button class="btn btn-secondary" onclick="this.parentElement.parentElement.style.display='none'">
-        <span class="btn-icon">❌</span>
-        Annuleren
-      </button>
+  <!-- Add Market Section -->
+  <section id="add" class="add-market hidden">
+    <div class="container">
+      <div class="section-header">
+        <h2>Evenement toevoegen</h2>
+        <p>Deel je evenement met anderen in de buurt</p>
+      </div>
+
+      <form id="market-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="market-name">Naam evenement *</label>
+            <input type="text" id="market-name" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="market-type">Type *</label>
+            <select id="market-type" required>
+              <option value="">Selecteer type</option>
+              <option value="rommelmarkt">Rommelmarkt</option>
+              <option value="garageverkoop">Garageverkoop</option>
+              <option value="braderie">Braderie</option>
+              <option value="kermis">Kermis</option>
+              <option value="boerenmarkt">Boerenmarkt</option>
+              <option value="antiekmarkt">Antiekmarkt</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="market-location">Locatie *</label>
+            <input type="text" id="market-location" placeholder="Straat, nummer, postcode stad" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="market-organizer">Organisator</label>
+            <input type="text" id="market-organizer">
+          </div>
+          
+          <div class="form-group">
+            <label for="market-date">Datum *</label>
+            <input type="date" id="market-date" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="market-time-start">Starttijd *</label>
+            <input type="time" id="market-time-start" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="market-time-end">Eindtijd</label>
+            <input type="time" id="market-time-end">
+          </div>
+          
+          <div class="form-group">
+            <label for="market-stands">Aantal standjes</label>
+            <input type="number" id="market-stands" min="1">
+          </div>
+          
+          <div class="form-group">
+            <label for="market-price">Standgeld per meter (€)</label>
+            <input type="number" id="market-price" step="0.50" min="0">
+          </div>
+          
+          <div class="form-group">
+            <label for="market-contact">Contact</label>
+            <input type="text" id="market-contact" placeholder="Telefoon of email">
+          </div>
+        </div>
+        
+        <div class="form-group full-width">
+          <label for="market-description">Beschrijving</label>
+          <textarea id="market-description" placeholder="Extra informatie over het evenement..."></textarea>
+        </div>
+        
+        <button type="submit" class="btn">Evenement toevoegen</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- User Bar (hidden by default) -->
+  <div id="user-bar" class="user-bar hidden">
+    <div class="container">
+      <div class="user-info">
+        <span id="user-email"></span>
+      </div>
+      <button id="logout-btn" class="btn btn-outline">Uitloggen</button>
     </div>
   </div>
 
-  <!-- Main Content -->
-  <main id="main-content">
-    
-    <!-- User Bar (only when logged in) -->
-    <div id="user-bar" class="user-bar" style="display: none;">
-      <div class="container">
-        <div class="user-info">
-          <div class="user-avatar">👤</div>
-          <div class="user-details">
-            <span id="user-email" class="user-email"></span>
-            <span class="user-badge">Organisator</span>
-          </div>
-        </div>
-        <button id="logout-btn" class="btn btn-secondary btn-small">
-          <span class="btn-icon">👋</span>
-          Uitloggen
-        </button>
-      </div>
-    </div>
-
-    <!-- Admin Panel (only for admin users) -->
-    <section id="admin-panel" class="admin-section" style="display: none;">
-      <div class="container">
-        <div class="section-header">
-          <h2>🔧 Admin Dashboard</h2>
-          <p>Beheer alle markten en importeer bulk data</p>
-        </div>
-        
-        <div class="admin-card">
-          <h3>📥 Bulk Data Import</h3>
-          <p>Plak hier je rommelmarkt data om ze automatisch te verwerken:</p>
-          
-          <form id="bulk-import-form">
-            <div class="form-group full-width">
-              <label for="bulk-data">Rommelmarkt Data:</label>
-              <textarea id="bulk-data" rows="15" placeholder="Plak hier de rommelmarkt data..."></textarea>
-            </div>
-            
-            <div class="admin-actions">
-              <button type="submit" class="btn btn-primary btn-large">
-                <span class="btn-icon">📥</span>
-                Data Importeren
-              </button>
-              <button type="button" id="clear-all-btn" class="btn btn-danger">
-                <span class="btn-icon">🗑️</span>
-                Alle Data Wissen
-              </button>
-            </div>
-          </form>
-          
-          <div id="import-results" class="import-results" style="display: none;"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Add Market Section -->
-    <section id="toevoegen" class="add-market-section" style="display: none;">
-      <div class="container">
-        <div class="section-header">
-          <h2>✨ Nieuwe markt toevoegen</h2>
-          <p>Deel je geweldige evenement met anderen in de buurt!</p>
-        </div>
-        
-        <form id="market-form" class="market-form">
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="market-name">📝 Naam evenement *</label>
-              <input type="text" id="market-name" placeholder="bijv. Grote rommelmarkt Sint-Pieters" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="market-type">🎪 Type evenement *</label>
-              <select id="market-type" required>
-                <option value="">Selecteer type</option>
-                <option value="rommelmarkt">🏪 Rommelmarkt</option>
-                <option value="garageverkoop">🏠 Garageverkoop</option>
-                <option value="braderie">🛍️ Braderie</option>
-                <option value="kermis">🎡 Kermis</option>
-                <option value="boerenmarkt">🥕 Boerenmarkt</option>
-                <option value="antiekmarkt">🏺 Antiekmarkt</option>
-                <option value="feest">🎉 Dorps-/stadsfeest</option>
-              </select>
-            </div>
-            
-            <div class="form-group">
-              <label for="market-location">📍 Locatie *</label>
-              <input type="text" id="market-location" placeholder="Straat, nummer, postcode stad" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="market-organizer">👥 Organisator</label>
-              <input type="text" id="market-organizer" placeholder="bijv. Wijkcomité, Gemeente">
-            </div>
-            
-            <div class="form-group">
-              <label for="market-date">📅 Datum *</label>
-              <input type="date" id="market-date" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="market-time-start">🕐 Starttijd *</label>
-              <input type="time" id="market-time-start" required>
-            </div>
-            
-            <div class="form-group">
-              <label for="market-time-end">🕕 Eindtijd</label>
-              <input type="time" id="market-time-end">
-            </div>
-            
-            <div class="form-group">
-              <label for="market-stands">🏪 Aantal standjes</label>
-              <input type="number" id="market-stands" min="1" max="1000" placeholder="bijv. 50">
-            </div>
-            
-            <div class="form-group">
-              <label for="market-price">💰 Standgeld per meter</label>
-              <input type="number" id="market-price" step="0.50" min="0" placeholder="bijv. 2.50">
-            </div>
-            
-            <div class="form-group">
-              <label for="market-contact">📞 Contact (telefoon/email)</label>
-              <input type="text" id="market-contact" placeholder="bijv. 09 123 45 67 of info@voorbeeld.be">
-            </div>
-            
-            <div class="form-group">
-              <label for="market-image">🖼️ Affiche/foto uploaden</label>
-              <input type="file" id="market-image" accept="image/*" class="file-input">
-              <div class="file-preview" id="image-preview" style="display: none;">
-                <img id="preview-img" src="" alt="Preview">
-                <button type="button" class="btn-remove-image" onclick="removeImage()">❌</button>
-              </div>
-            </div>
-          </div>
-          
-          <div class="form-group full-width">
-            <label for="market-description">📋 Beschrijving</label>
-            <textarea id="market-description" rows="4" placeholder="Extra informatie over het evenement, parkeerinfo, specialiteiten..."></textarea>
-          </div>
-          
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-extra-large">
-              <span class="btn-icon">🚀</span>
-              Evenement toevoegen
-            </button>
-          </div>
-        </form>
-      </div>
-    </section>
-
-    <!-- Markets List Section -->
-    <section id="markten" class="markets-section">
-      <div class="container">
-        <div class="section-header">
-          <h2>🎪 Alle evenementen ontdekken</h2>
-          <p>Vind jouw perfecte rommelmarkt of evenement in de buurt</p>
-        </div>
-        
-        <!-- Enhanced Filters -->
-        <div class="filters-container">
-          <div class="filters-row">
-            <div class="filter-group">
-              <label for="filter-type">🎪 Type:</label>
-              <select id="filter-type" class="filter-select">
-                <option value="">Alle types</option>
-                <option value="rommelmarkt">🏪 Rommelmarkten</option>
-                <option value="garageverkoop">🏠 Garageverkopen</option>
-                <option value="braderie">🛍️ Braderieën</option>
-                <option value="kermis">🎡 Kermissen</option>
-                <option value="boerenmarkt">🥕 Boerenmarkten</option>
-                <option value="antiekmarkt">🏺 Antiekmarkten</option>
-                <option value="feest">🎉 Feesten</option>
-              </select>
-            </div>
-            
-            <div class="filter-group">
-              <label for="filter-location">📍 Locatie:</label>
-              <input type="text" id="filter-location" placeholder="Stad, postcode..." class="filter-input">
-            </div>
-            
-            <div class="filter-group">
-              <label for="filter-date">📅 Wanneer:</label>
-              <select id="filter-date" class="filter-select">
-                <option value="">Alle data</option>
-                <option value="today">Vandaag</option>
-                <option value="tomorrow">Morgen</option>
-                <option value="week">Deze week</option>
-                <option value="weekend">Dit weekend</option>
-                <option value="month">Deze maand</option>
-              </select>
-            </div>
-            
-            <div class="filter-group">
-              <button id="clear-filters" class="btn btn-secondary">
-                <span class="btn-icon">🔄</span>
-                Reset
-              </button>
-            </div>
-          </div>
-          
-          <!-- Results info -->
-          <div class="results-info">
-            <div class="results-text">
-              <span id="results-count">0 evenementen gevonden</span>
-            </div>
-            <div class="view-toggle">
-              <button id="view-grid" class="view-btn active" title="Grid weergave">
-                <span class="btn-icon">▦</span>
-              </button>
-              <button id="view-list" class="view-btn" title="Lijst weergave">
-                <span class="btn-icon">☰</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Loading state -->
-        <div id="loading-markets" class="loading-state" style="display: none;">
-          <div class="loading-spinner"></div>
-          <p>Geweldige evenementen laden... ✨</p>
-        </div>
-        
-        <!-- Markets grid -->
-        <div id="markets-container" class="markets-grid">
-          <!-- Markets will be loaded here -->
-        </div>
-        
-        <!-- No results state -->
-        <div id="no-markets" class="no-markets" style="display: none;">
-          <div class="no-markets-icon">🎪</div>
-          <h3>Geen evenementen gevonden</h3>
-          <p>Pas je filters aan of voeg zelf een geweldig evenement toe!</p>
-          <button id="suggest-event" class="btn btn-primary btn-large">
-            <span class="btn-icon">✨</span>
-            Evenement toevoegen
-          </button>
-        </div>
-        
-        <!-- Load more button -->
-        <div id="load-more-container" class="load-more-container" style="display: none;">
-          <button id="load-more-btn" class="btn btn-secondary btn-large">
-            <span class="btn-icon">⬇️</span>
-            Meer laden
-          </button>
-        </div>
-      </div>
-    </section>
-  </main>
-
   <!-- Footer -->
-  <footer class="footer">
+  <footer>
     <div class="container">
-      <div class="footer-content">
-        <div class="footer-section">
-          <div class="logo">
-            <span class="logo-icon">🏪</span>
-            <span class="logo-text">Rommelmarkt-in-je-buurt</span>
-          </div>
-          <p>Ontdek de mooiste rommelmarkten en evenementen. Van schatten zoeken tot gezellige momenten beleven! 💎</p>
-        </div>
-        <div class="footer-section">
-          <h4>🚀 Ontdekken</h4>
-          <ul>
-            <li><a href="#markten">Alle markten</a></li>
-            <li><a href="#toevoegen">Evenement toevoegen</a></li>
-            <li><a href="#hero">Home</a></li>
-          </ul>
-        </div>
-        <div class="footer-section">
-          <h4>💡 Tips</h4>
-          <p>💡 Kom vroeg voor de beste spullen<br>
-             🎒 Neem een grote tas mee<br>
-             💰 Vergeet contant geld niet!</p>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2025 Rommelmarkt-in-je-buurt - Gemaakt met ❤️ voor schattenjagers!</p>
-      </div>
+      <p>&copy; 2025 Rommelmarkten in je buurt</p>
     </div>
   </footer>
 
+  <!-- Scripts -->
+  <script type="module" src="firebase.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

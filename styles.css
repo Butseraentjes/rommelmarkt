@@ -4,22 +4,44 @@ body {
   margin: 0;
   padding: 2rem;
   color: #333;
+  line-height: 1.6;
 }
 
 h1 {
   color: #2c3e50;
   text-align: center;
   margin-bottom: 2rem;
+  font-size: 2.5rem;
+}
+
+h3 {
+  color: #34495e;
+  margin-bottom: 1rem;
 }
 
 #login-container,
 #main-content {
-  max-width: 500px;
+  max-width: 600px;
   margin: 0 auto;
   background-color: white;
   padding: 2rem;
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+#user-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+#user-email {
+  font-weight: bold;
+  margin: 0;
+  color: #1a237e;
 }
 
 button {
@@ -37,27 +59,118 @@ button:hover {
   background-color: #005fa3;
 }
 
+#logout-btn {
+  background-color: #e74c3c;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+}
+
+#logout-btn:hover {
+  background-color: #c0392b;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+input, textarea {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: #0077cc;
+  box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.2);
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
 .hidden {
   display: none;
 }
 
-#user-email {
+#markets-container {
+  display: grid;
+  gap: 1rem;
+}
+
+.market-card {
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border-left: 4px solid #0077cc;
+}
+
+.market-card h4 {
+  margin: 0 0 0.5rem 0;
+  color: #2c3e50;
+}
+
+.market-card .market-location {
+  color: #7f8c8d;
   font-weight: bold;
-  margin-bottom: 1rem;
-  color: #1a237e;
+  margin-bottom: 0.5rem;
+}
+
+.market-card .market-datetime {
+  color: #e74c3c;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.market-card .market-description {
+  color: #34495e;
+  font-style: italic;
+  margin-bottom: 0.5rem;
+}
+
+.market-card .market-added-by {
+  font-size: 0.8rem;
+  color: #95a5a6;
+  margin-top: 1rem;
+  border-top: 1px solid #ecf0f1;
+  padding-top: 0.5rem;
 }
 
 @media screen and (max-width: 600px) {
   body {
     padding: 1rem;
   }
-
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
   #login-container,
   #main-content {
     padding: 1rem;
   }
-
+  
+  #user-info {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  
   button {
     width: 100%;
+  }
+  
+  #logout-btn {
+    width: auto;
+    align-self: flex-end;
   }
 }

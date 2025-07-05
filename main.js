@@ -327,9 +327,7 @@ function isSameDay(date1, date2) {
 }
 
 // Update the old filterMarkets function to use new applyFilters
-function filterMarkets() {
-  applyFilters();
-}
+// (filterMarkets functie verwijderd - we gebruiken nu applyFilters)
       import { 
   auth, 
   provider, 

@@ -349,10 +349,20 @@ async function fetchMarkets(q){
     console.log('📊 Retrieved', snap.size, 'documents');
     
     const map=new Map();
-    snap.forEach(d=>{
+    snap.forEach((d, index) => {
       const m={id:d.id,...d.data()};
-      console.log('📄 Document data:', d.id, m);
-      console.log('📝 Fields:', Object.keys(m));
+      
+      // Log alleen de eerste 3 documenten om console niet te overbelasten
+      if(index < 3) {
+        console.log('📄 Document', index + 1, ':', d.id);
+        console.log('📝 All fields and values:', m);
+        console.log('🔑 Field names:', Object.keys(m));
+        console.log('📛 naam field:', m.naam);
+        console.log('📍 locatie field:', m.locatie);
+        console.log('📅 datumStart field:', m.datumStart);
+        console.log('---');
+      }
+      
       const key=`${m.naam}-${m.locatie}-${dateFromFS(m.datumStart).toDateString()}`;
       map.has(key)||map.set(key,m);
     });

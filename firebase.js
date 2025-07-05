@@ -44,33 +44,78 @@ const provider = new GoogleAuthProvider();
 // 🗃️ Firestore database
 const db = getFirestore(app);
 
-// 📅 Helper functies voor datum/tijd
+// 📅 Helper functies voor datum/tijd - FIXED VERSIE
 export const formatDate = (timestamp) => {
-  const date = timestamp.toDate();
-  return date.toLocaleDateString('nl-NL', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  if (!timestamp || typeof timestamp.toDate !== 'function') {
+    return 'Datum onbekend';
+  }
+  
+  try {
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('nl-NL', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  } catch (e) {
+    console.error('Error formatting date:', e);
+    return 'Datum onbekend';
+  }
 };
 
 export const formatTime = (timestamp) => {
-  const date = timestamp.toDate();
-  return date.toLocaleTimeString('nl-NL', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  if (!timestamp || typeof timestamp.toDate !== 'function') {
+    return 'Tijd onbekend';
+  }
+  
+  try {
+    const date = timestamp.toDate();
+    return date.toLocaleTimeString('nl-NL', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    console.error('Error formatting time:', e);
+    return 'Tijd onbekend';
+  }
 };
 
 export const formatDateTime = (timestamp) => {
-  const date = timestamp.toDate();
-  return {
-    date: formatDate(timestamp),
-    time: formatTime(timestamp),
-    dayName: date.toLocaleDateString('nl-NL', { weekday: 'long' }),
-    dayMonth: date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
-  };
+  if (!timestamp || typeof timestamp.toDate !== 'function') {
+    return {
+      date: 'Datum onbekend',
+      time: 'Tijd onbekend',
+      dayName: 'Onbekend',
+      dayMonth: 'Onbekend'
+    };
+  }
+  
+  try {
+    const date = timestamp.toDate();
+    return {
+      date: date.toLocaleDateString('nl-NL', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }),
+      time: date.toLocaleTimeString('nl-NL', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      dayName: date.toLocaleDateString('nl-NL', { weekday: 'long' }),
+      dayMonth: date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })
+    };
+  } catch (e) {
+    console.error('Error formatting datetime:', e);
+    return {
+      date: 'Datum onbekend',
+      time: 'Tijd onbekend',
+      dayName: 'Onbekend',
+      dayMonth: 'Onbekend'
+    };
+  }
 };
 
 // 👑 Admin gebruikers (voeg hier je eigen email toe)

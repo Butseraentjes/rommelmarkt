@@ -20,7 +20,8 @@ async function handleLogin() {
   
   if (!loginBtn) {
     console.error('❌ Login button not found');
-    return;import { 
+    return;
+  }import { 
   auth, 
   provider, 
   db, 

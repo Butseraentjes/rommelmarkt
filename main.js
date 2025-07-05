@@ -82,11 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   updateStats();
   
-  // Load markets immediately for public users
-  if (!currentUser) {
-    console.log('🌍 Loading public markets...');
-    loadMarketsPublic();
-  }
+  // Start with public view - auth state will be handled by onAuthStateChanged
+  console.log('🌍 Loading public markets...');
+  loadMarketsPublic();
 });
 
 // Also run immediately in case DOM is already loaded
@@ -110,6 +108,15 @@ function setupEventListeners() {
     console.error('❌ Login button not found!');
   }
   
+  // Voeg event listeners toe voor login knoppen in de navigatie (indien aanwezig)
+  const navLoginBtns = document.querySelectorAll('.nav-login-btn, .header-login-btn, .show-login');
+  navLoginBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      showLoginInterface();
+    });
+  });
+  
   if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
   if (marketForm) marketForm.addEventListener('submit', handleAddMarket);
   
@@ -132,6 +139,11 @@ function setupEventListeners() {
   // Suggest event listener
   if (suggestEventBtn) {
     suggestEventBtn.addEventListener('click', () => {
+      // Als niet ingelogd, toon login interface
+      if (!currentUser) {
+        showLoginInterface();
+        return;
+      }
       document.getElementById('toevoegen').scrollIntoView({ behavior: 'smooth' });
     });
   }
@@ -152,6 +164,14 @@ function setupEventListeners() {
   });
   
   console.log('✅ Event listeners setup complete!');
+}
+
+// Functie om login interface te tonen wanneer nodig
+function showLoginInterface() {
+  console.log('🔐 Showing login interface on user request');
+  if (loginContainer) {
+    loginContainer.style.display = 'flex';
+  }
 }
 
 // Authentication functions
@@ -205,27 +225,35 @@ async function handleLogout() {
   }
 }
 
-// Auth state observer
+// Verbeterde Auth state observer
 onAuthStateChanged(auth, (user) => {
   console.log('🔄 Auth state changed:', user ? `Logged in as ${user.email}` : 'Logged out');
   
   currentUser = user;
+  
   if (user) {
     // User is logged in
     console.log('✅ User logged in, showing main content');
     
+    // Hide login container
     if (loginContainer) {
       loginContainer.style.display = 'none';
       console.log('🚫 Login container hidden');
     }
+    
+    // Show main content
     if (mainContent) {
       mainContent.style.display = 'block';
       console.log('✅ Main content shown');
     }
+    
+    // Show user bar
     if (userBar) {
       userBar.style.display = 'block';
       console.log('👤 User bar shown');
     }
+    
+    // Set user email
     if (userEmail) {
       userEmail.textContent = user.email;
       console.log('📧 User email set:', user.email);
@@ -240,28 +268,35 @@ onAuthStateChanged(auth, (user) => {
       console.log('🔧 Admin panel:', isAdmin ? 'shown' : 'hidden');
     }
     
-    // Show all sections for logged in users
+    // Show add section for logged in users
     const toevoegenSection = document.getElementById('toevoegen');
     if (toevoegenSection) {
       toevoegenSection.style.display = 'block';
       console.log('➕ Toevoegen section shown');
     }
     
+    // Load markets for authenticated users
     loadMarkets();
   } else {
-    // User is logged out
-    console.log('👤 User logged out, showing login');
+    // User is logged out - FOR PUBLIC VIEWING, DON'T SHOW LOGIN CONTAINER
+    console.log('👤 User logged out, setting up public view');
     
+    // BELANGRIJKE WIJZIGING: Voor publieke weergave, toon GEEN login container
+    // Alleen tonen als de gebruiker expliciet wil inloggen
     if (loginContainer) {
-      loginContainer.style.display = 'flex';
-      console.log('🔐 Login container shown');
+      loginContainer.style.display = 'none'; // Verander van 'flex' naar 'none'
+      console.log('🚫 Login container hidden for public view');
     }
+    
+    // Keep main content visible for public viewing
     if (mainContent) {
-      mainContent.style.display = 'block'; // Still show main content
-      console.log('📄 Main content kept visible');
+      mainContent.style.display = 'block';
+      console.log('📄 Main content kept visible for public');
     }
+    
+    // Hide user bar
     if (userBar) {
-      userBar.style.display = 'none'; // Hide user bar
+      userBar.style.display = 'none';
       console.log('🚫 User bar hidden');
     }
     
@@ -729,78 +764,6 @@ function createGridView(market, eventType, dateTime, endTime) {
         ${eventType.icon} ${eventType.label}
       </div>
       
-      <h3>${escapeHtml(market.naam)}</h3>
-      
-      <div class="market-date-time">
-        📅 ${dateTime.dayName}
-        <br>
-        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
-      </div>
-      
-      <div class="market-details-grid">
-        <div class="market-detail">
-          <span class="market-detail-icon">📍</span>
-          <span>${escapeHtml(market.locatie)}</span>
-        </div>
-        
-        ${market.organisator ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">👥</span>
-            <span>${escapeHtml(market.organisator)}</span>
-          </div>
-        ` : ''}
-        
-        ${market.aantalStanden ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">🏪</span>
-            <span>${market.aantalStanden} standjes</span>
-          </div>
-        ` : ''}
-        
-        ${market.standgeld ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">💰</span>
-            <span>€${market.standgeld.toFixed(2)} per meter</span>
-          </div>
-        ` : ''}
-        
-        ${market.contact ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">📞</span>
-            <span>${escapeHtml(market.contact)}</span>
-          </div>
-        ` : ''}
-      </div>
-      
-      ${market.beschrijving ? `
-        <div class="market-description">
-          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
-        </div>
-      ` : ''}
-    </div>
-    
-    <div class="market-footer">
-      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
-    </div>
-  `;
-}
-
-function createListView(market, eventType, dateTime, endTime) {
-  const hasImage = market.imageUrl && market.imageUrl !== '';
-  
-  return `
-    ${hasImage ? `
-      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
-    ` : `
-      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
-        ${eventType.icon}
-      </div>
-    `}
-    
-    <div class="market-info">
-      <div class="market-type-badge ${eventType.color}">
-        ${eventType.icon} ${eventType.label}
-      </div>
       <h3>${escapeHtml(market.naam)}</h3>
       <div class="market-detail">
         <span class="market-detail-icon">📍</span>
@@ -1418,44 +1381,76 @@ async function deleteMarket(marketId) {
 // Make deleteMarket globally accessible for onclick handlers
 if (typeof window !== 'undefined') {
   window.deleteMarket = deleteMarket;
+}(market.naam)}</h3>
+      
+      <div class="market-date-time">
+        📅 ${dateTime.dayName}
+        <br>
+        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+      </div>
+      
+      <div class="market-details-grid">
+        <div class="market-detail">
+          <span class="market-detail-icon">📍</span>
+          <span>${escapeHtml(market.locatie)}</span>
+        </div>
+        
+        ${market.organisator ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">👥</span>
+            <span>${escapeHtml(market.organisator)}</span>
+          </div>
+        ` : ''}
+        
+        ${market.aantalStanden ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">🏪</span>
+            <span>${market.aantalStanden} standjes</span>
+          </div>
+        ` : ''}
+        
+        ${market.standgeld ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">💰</span>
+            <span>€${market.standgeld.toFixed(2)} per meter</span>
+          </div>
+        ` : ''}
+        
+        ${market.contact ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">📞</span>
+            <span>${escapeHtml(market.contact)}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${market.beschrijving ? `
+        <div class="market-description">
+          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
+        </div>
+      ` : ''}
+    </div>
+    
+    <div class="market-footer">
+      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
+    </div>
+  `;
 }
 
-// Manual override function to force UI update
-function forceUIUpdate() {
-  console.log('🔧 Force UI update triggered');
+function createListView(market, eventType, dateTime, endTime) {
+  const hasImage = market.imageUrl && market.imageUrl !== '';
   
-  if (currentUser) {
-    console.log('👤 Current user exists, forcing logged-in state');
+  return `
+    ${hasImage ? `
+      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
+    ` : `
+      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
+        ${eventType.icon}
+      </div>
+    `}
     
-    // Force hide login
-    if (loginContainer) {
-      loginContainer.style.display = 'none !important';
-      loginContainer.style.visibility = 'hidden';
-      loginContainer.classList.add('hidden');
-    }
-    
-    // Force show main content  
-    if (mainContent) {
-      mainContent.style.display = 'block !important';
-      mainContent.style.visibility = 'visible';
-      mainContent.classList.remove('hidden');
-    }
-    
-    // Force show user bar
-    if (userBar) {
-      userBar.style.display = 'block !important';
-      userBar.style.visibility = 'visible';
-    }
-    
-    console.log('✅ UI force update complete');
-  }
-}
-
-// Call this after a delay to ensure auth state is processed
-setTimeout(() => {
-  console.log('⏰ Delayed UI check...');
-  if (currentUser) {
-    console.log('👤 User found after delay, forcing UI update');
-    forceUIUpdate();
-  }
-}, 1000);
+    <div class="market-info">
+      <div class="market-type-badge ${eventType.color}">
+        ${eventType.icon} ${eventType.label}
+      </div>
+      <h3>${escapeHtml

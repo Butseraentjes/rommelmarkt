@@ -1,5 +1,5 @@
 // =============================================================
-// Rommelmarkten.be – Main.js  (v2025-07-05 patch-7)
+// Rommelmarkten.be – Main.js  (v2025-07-05 patch-8)
 // =============================================================
 // Wijzigingen in deze patch
 // -------------------------------------------------------------
@@ -12,6 +12,7 @@
 // • Form handling toegevoegd voor evenement toevoegen
 // • Auth state management verbeterd
 // • Image upload en preview functionaliteit
+// • Firebase debug code toegevoegd voor CORS troubleshooting
 // -------------------------------------------------------------
 
 import {
@@ -34,13 +35,14 @@ import {
   eventTypes,
   adminEmails,
   deleteDoc,
-  doc
+  doc,
+  limit
 } from './firebase.js';
 
 // ──────────────────────────────────────────────────────────────
 // 🔧 Helpers & config
 // ──────────────────────────────────────────────────────────────
-const DEBUG = false;                           // zet naar true voor console-debug
+const DEBUG = true;                           // zet naar true voor console-debug
 const COLLECTION = 'rommelmarkten';
 const PER_PAGE   = 12;
 
@@ -48,6 +50,12 @@ const log=(...a)=>DEBUG&&console.log('[RM]',...a);
 const debounce=(fn,d=300)=>{let t;return(...x)=>{clearTimeout(t);t=setTimeout(()=>fn.apply(this,x),d);} }; 
 const isSameDay=(a,b)=>a.toDateString()===b.toDateString();
 const escapeHtml=t=>t.replace(/[&<>"]|'?/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#039;'}[m]));
+
+// Firebase Debug Info
+console.log('🔥 Firebase Debug Info:');
+console.log('Current URL:', window.location.href);
+console.log('Auth object:', auth);
+console.log('DB object:', db);
 
 // Firestore Timestamp → Date, of direct Date/string → Date
 function dateFromFS(ts){
@@ -86,6 +94,30 @@ function dom(){
   $['adminPanel']=document.getElementById('admin-panel');
 }
 
+// ──────────────────────────────────────────────────────────────
+// 🔧 Firebase Debug & Testing
+// ──────────────────────────────────────────────────────────────
+// Test Firebase connection
+setTimeout(async () => {
+  try {
+    console.log('🧪 Testing Firestore connection...');
+    const testQuery = query(collection(db, COLLECTION), limit(1));
+    const snap = await getDocs(testQuery);
+    console.log('✅ Firestore connection successful!');
+    console.log('Documents found:', snap.size);
+    if (snap.size > 0) {
+      snap.forEach(doc => {
+        console.log('Sample document:', doc.id, doc.data());
+      });
+    }
+  } catch (error) {
+    console.error('❌ Firestore connection failed:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Full error object:', error);
+  }
+}, 2000);
+
 document.addEventListener('DOMContentLoaded',()=>{if(initialized)return;initialized=true;dom();listeners();stats();setTimeout(()=>!allMarkets.length&&loadPublic(),400);});
 
 // ──────────────────────────────────────────────────────────────
@@ -112,7 +144,25 @@ function listeners(){
 
 function showLoginModal(){currentUser?document.getElementById('toevoegen')?.scrollIntoView({behavior:'smooth'}):$['loginContainer']&&( $['loginContainer'].style.display='flex');}
 
-async function login(){if(!$['loginBtn'])return;try{$['loginBtn'].disabled=true;$['loginBtn'].textContent='⏳ Inloggen...';provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,provider);$['loginContainer'].style.display='none';}catch(e){alert('Kon niet inloggen');log(e);}finally{$['loginBtn'].disabled=false;$['loginBtn'].textContent='🔐 Inloggen met Google';}}
+async function login(){
+  if(!$['loginBtn'])return;
+  try{
+    console.log('🔐 Starting login process...');
+    $['loginBtn'].disabled=true;
+    $['loginBtn'].textContent='⏳ Inloggen...';
+    provider.setCustomParameters({prompt:'select_account'});
+    const result = await signInWithPopup(auth,provider);
+    console.log('✅ Login successful:', result.user.email);
+    $['loginContainer'].style.display='none';
+  }catch(e){
+    console.error('❌ Login failed:', e);
+    alert('Kon niet inloggen: ' + e.message);
+    log(e);
+  }finally{
+    $['loginBtn'].disabled=false;
+    $['loginBtn'].textContent='🔐 Inloggen met Google';
+  }
+}
 
 // ──────────────────────────────────────────────────────────────
 // 📝 Form Handling
@@ -130,6 +180,8 @@ function setupFormHandling() {
     }
     
     try {
+      console.log('📝 Starting form submission...');
+      
       // Haal form data op
       const naam = document.getElementById('market-name')?.value?.trim();
       const type = document.getElementById('market-type')?.value;
@@ -197,8 +249,11 @@ function setupFormHandling() {
       if (beschrijving) eventData.beschrijving = beschrijving;
       if (imageUrl) eventData.imageUrl = imageUrl;
       
+      console.log('💾 Saving event data:', eventData);
+      
       // Opslaan in Firestore
-      await addDoc(collection(db, COLLECTION), eventData);
+      const docRef = await addDoc(collection(db, COLLECTION), eventData);
+      console.log('✅ Event saved with ID:', docRef.id);
       
       // Success feedback
       toast('Evenement succesvol toegevoegd!');
@@ -215,8 +270,10 @@ function setupFormHandling() {
       document.getElementById('markten')?.scrollIntoView({ behavior: 'smooth' });
       
     } catch (error) {
-      console.error('Error adding event:', error);
-      toast('Er ging iets mis bij het toevoegen van het evenement');
+      console.error('❌ Error adding event:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      toast('Er ging iets mis bij het toevoegen van het evenement: ' + error.message);
     }
   });
   
@@ -252,8 +309,9 @@ function removeImage() {
 // Maak removeImage globaal beschikbaar
 window.removeImage = removeImage;
 
-// Auth-observer
+// Auth-observer met debug info
 onAuthStateChanged(auth,u=>{
+  console.log('🔐 Auth state changed:', u ? 'Logged in as ' + u.email : 'Not logged in');
   currentUser=u;
   isAdmin=!!u&&adminEmails.includes(u.email);
   $['userMenu'] && ($['userMenu'].style.display=u?'flex':'none');
@@ -273,10 +331,46 @@ onAuthStateChanged(auth,u=>{
 // ──────────────────────────────────────────────────────────────
 // 📥 Data-load
 // ──────────────────────────────────────────────────────────────
-async function loadPublic(){await fetchMarkets(query(collection(db,COLLECTION),orderBy('datumStart','asc')));} 
-async function loadPrivate(){await fetchMarkets(query(collection(db,COLLECTION),orderBy('datumStart','asc')));} // kan uitgebreid worden met where('status','==','actief')
+async function loadPublic(){
+  console.log('📥 Loading public markets...');
+  await fetchMarkets(query(collection(db,COLLECTION),orderBy('datumStart','asc')));
+} 
 
-async function fetchMarkets(q){try{loadingState(true);const snap=await getDocs(q);const map=new Map();snap.forEach(d=>{const m={id:d.id,...d.data()};const key=`${m.naam}-${m.locatie}-${dateFromFS(m.datumStart).toDateString()}`;map.has(key)||map.set(key,m);});allMarkets=[...map.values()].sort((a,b)=>dateFromFS(a.datumStart)-dateFromFS(b.datumStart));currentPage=1;filter();stats();hero();}catch(e){console.error(e);errorState();}finally{loadingState(false);} }
+async function loadPrivate(){
+  console.log('📥 Loading private markets...');
+  await fetchMarkets(query(collection(db,COLLECTION),orderBy('datumStart','asc')));
+} // kan uitgebreid worden met where('status','==','actief')
+
+async function fetchMarkets(q){
+  try{
+    console.log('🔄 Fetching markets from Firestore...');
+    loadingState(true);
+    const snap=await getDocs(q);
+    console.log('📊 Retrieved', snap.size, 'documents');
+    
+    const map=new Map();
+    snap.forEach(d=>{
+      const m={id:d.id,...d.data()};
+      const key=`${m.naam}-${m.locatie}-${dateFromFS(m.datumStart).toDateString()}`;
+      map.has(key)||map.set(key,m);
+    });
+    
+    allMarkets=[...map.values()].sort((a,b)=>dateFromFS(a.datumStart)-dateFromFS(b.datumStart));
+    console.log('✅ Processed', allMarkets.length, 'unique markets');
+    
+    currentPage=1;
+    filter();
+    stats();
+    hero();
+  }catch(e){
+    console.error('❌ Error fetching markets:', e);
+    console.error('Error code:', e.code);
+    console.error('Error message:', e.message);
+    errorState();
+  }finally{
+    loadingState(false);
+  } 
+}
 
 // ──────────────────────────────────────────────────────────────
 // 🔍 Filter & render

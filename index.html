@@ -175,9 +175,51 @@
       <div class="user-info">
         <span id="user-email"></span>
       </div>
-      <button id="logout-btn" class="btn btn-outline">Uitloggen</button>
+      <div class="user-actions">
+        <button id="admin-btn" class="btn btn-outline hidden">Admin</button>
+        <button id="logout-btn" class="btn btn-outline">Uitloggen</button>
+      </div>
     </div>
   </div>
+
+  <!-- Admin Panel (hidden by default) -->
+  <section id="admin" class="admin-panel hidden">
+    <div class="container">
+      <div class="section-header">
+        <h2>Admin Dashboard</h2>
+        <p>Beheer alle markten en importeer bulk data</p>
+      </div>
+
+      <!-- Bulk Import -->
+      <div class="admin-card">
+        <h3>Bulk Data Import</h3>
+        <p>Plak hier je rommelmarkt data om ze automatisch te verwerken:</p>
+        
+        <form id="bulk-import-form">
+          <div class="form-group full-width">
+            <label for="bulk-data">Rommelmarkt Data:</label>
+            <textarea id="bulk-data" rows="15" placeholder="Plak hier de rommelmarkt data..."></textarea>
+          </div>
+          
+          <div class="admin-actions">
+            <button type="submit" class="btn">Data Importeren</button>
+            <button type="button" id="clear-all-btn" class="btn btn-danger">Alle Data Wissen</button>
+          </div>
+        </form>
+        
+        <div id="import-results" class="import-results hidden"></div>
+      </div>
+
+      <!-- Market Management -->
+      <div class="admin-card">
+        <h3>Markt Beheer</h3>
+        <p>Overzicht van alle markten met beheeropties:</p>
+        <div id="admin-markets" class="admin-markets">
+          <!-- Admin market list will be loaded here -->
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- Footer -->
   <footer>

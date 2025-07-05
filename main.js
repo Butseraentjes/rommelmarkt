@@ -623,8 +623,11 @@ async function handleBulkImport(e) {
 function parseRommelmarktData(rawData) {
   const markets = [];
   
+  // Eerst: reorganiseer de data om datum/tijd bij het juiste evenement te voegen
+  const reorganizedData = reorganizeMarketData(rawData);
+  
   // Split data into blocks separated by 'L' markers
-  const blocks = rawData.split(/^L\s*$/m).filter(block => block.trim());
+  const blocks = reorganizedData.split(/^L\s*$/m).filter(block => block.trim());
   
   for (const block of blocks) {
     try {
@@ -640,10 +643,50 @@ function parseRommelmarktData(rawData) {
   return markets;
 }
 
-function parseMarketBlock(block) {
-  const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+function reorganizeMarketData(rawData) {
+  // Split op L markers maar behoud de L markers
+  const parts = rawData.split(/^L\s*$/m);
   
-  if (lines.length < 3) return null;
+  const reorganized = [];
+  let currentEventData = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (!part) continue;
+    
+    // Check if this part contains plaats/postcode (start of new event)
+    const hasLocation = /^[A-Z\s-]+\s*\(\d{4}\)/.test(part);
+    
+    // Check if this part contains datum (za/zo/ma etc.)
+    const hasDate = /^(ma|di|wo|do|vr|za|zo)\s+\d{1,2}\s+\w+\s+\d{4}/.test(part);
+    
+    if (hasLocation) {
+      // Start of new event
+      if (currentEventData) {
+        reorganized.push('L\n' + currentEventData);
+      }
+      currentEventData = part;
+    } else if (hasDate && currentEventData) {
+      // Add date/time to current event
+      currentEventData += '\n' + part;
+    } else if (currentEventData) {
+      // Add additional info to current event
+      currentEventData += '\n' + part;
+    }
+  }
+  
+  // Don't forget the last event
+  if (currentEventData) {
+    reorganized.push('L\n' + currentEventData);
+  }
+  
+  return reorganized.join('\n\n');
+}
+
+function parseMarketBlock(block) {
+  const lines = block.split('\n').map(line => line.trim()).filter(line => line && line !== 'L');
+  
+  if (lines.length < 2) return null;
   
   let plaats = '';
   let postcode = '';
@@ -658,6 +701,8 @@ function parseMarketBlock(block) {
   let standgeld = null;
   let type = 'rommelmarkt';
   
+  console.log('Parsing block with lines:', lines); // Debug log
+  
   // Parse eerste regel voor plaats en postcode
   const firstLine = lines[0];
   const plaatsMatch = firstLine.match(/^([A-Z\s-]+(?:\s*-\s*[A-Z\s]+)?)\s*\((\d{4})\)\s*(.*)$/);
@@ -665,9 +710,10 @@ function parseMarketBlock(block) {
     plaats = plaatsMatch[1].trim();
     postcode = plaatsMatch[2];
     adres = plaatsMatch[3].trim();
+    console.log('Found plaats:', plaats, 'postcode:', postcode, 'adres:', adres);
   }
   
-  // Zoek naar datum/tijd lijnen
+  // Zoek door alle lijnen
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     
@@ -676,51 +722,59 @@ function parseMarketBlock(block) {
     if (datumMatch) {
       const [, , dag, maand, jaar] = datumMatch;
       datum = parseDutchDate(`${dag} ${maand} ${jaar}`);
-      
-      // Kijk naar volgende regel voor tijd
-      if (i + 1 < lines.length) {
-        const tijdMatch = lines[i + 1].match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-        if (tijdMatch) {
-          const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
-          startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
-          eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
-        }
-      }
+      console.log('Found datum:', datum, 'from line:', line);
+      continue;
     }
     
-    // Zoek organisator info
-    if (line.includes('@') || line.includes('tel') || line.includes('+32')) {
-      if (line.includes('-') && !contact) {
-        const parts = line.split('-');
-        if (parts.length >= 2) {
-          organisator = parts[0].trim();
-          contact = parts.slice(1).join('-').trim();
-        }
+    // Zoek tijd (9:00 - 16:00)
+    const tijdMatch = line.match(/^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/);
+    if (tijdMatch) {
+      const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
+      startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
+      eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
+      console.log('Found tijd:', startTijd, '-', eindTijd);
+      continue;
+    }
+    
+    // Zoek organisator en contact (regel met email of telefoon)
+    if (line.includes('@') || line.includes('+32')) {
+      const parts = line.split('-');
+      if (parts.length >= 2) {
+        organisator = parts[0].trim();
+        contact = parts.slice(1).join('-').trim();
+      } else {
+        contact = line;
       }
+      continue;
     }
     
     // Zoek standgeld
     const standgeldMatch = line.match(/standplaats\s*([\d,]+)\s*€/i);
     if (standgeldMatch) {
       standgeld = parseFloat(standgeldMatch[1].replace(',', '.'));
+      continue;
     }
     
-    // Bepaal naam en type
-    if (line.length > 20 && line.length < 100 && !line.includes('@') && !line.includes('http') && !line.includes('tel')) {
-      if (line.toLowerCase().includes('rommelmarkt') || 
-          line.toLowerCase().includes('markt') || 
-          line.toLowerCase().includes('feest')) {
+    // Bepaal naam (lange regel die een titel lijkt)
+    if (!naam && line.length > 5 && line.length < 80 && 
+        !line.includes('http') && !line.includes('@') && 
+        !line.includes('(') && !line.match(/^\d/)) {
+      
+      // Skip sommige technische regels
+      if (!line.toLowerCase().includes('opstellen') && 
+          !line.toLowerCase().includes('ontruiming') &&
+          !line.toLowerCase().includes('bekijk details')) {
         naam = line;
       }
     }
     
-    // Bepaal type
-    if (line.toLowerCase().includes('garage')) type = 'garageverkoop';
-    if (line.toLowerCase().includes('braderie')) type = 'braderie';
-    if (line.toLowerCase().includes('kermis')) type = 'kermis';
-    if (line.toLowerCase().includes('antiek')) type = 'antiekmarkt';
-    if (line.toLowerCase().includes('brocante')) type = 'antiekmarkt';
-    if (line.toLowerCase().includes('feest')) type = 'feest';
+    // Bepaal type op basis van inhoud
+    const lowerLine = line.toLowerCase();
+    if (lowerLine.includes('garage')) type = 'garageverkoop';
+    if (lowerLine.includes('braderie')) type = 'braderie';
+    if (lowerLine.includes('kermis')) type = 'kermis';
+    if (lowerLine.includes('antiek') || lowerLine.includes('brocante')) type = 'antiekmarkt';
+    if (lowerLine.includes('feest')) type = 'feest';
   }
   
   // Fallback voor naam
@@ -728,18 +782,27 @@ function parseMarketBlock(block) {
     naam = `Rommelmarkt ${plaats}`;
   }
   
-  // Maak beschrijving
-  beschrijving = lines.slice(2, Math.min(8, lines.length))
-    .filter(line => !line.includes('@') && !line.includes('http') && line.length > 10)
+  // Maak beschrijving van relevante regels
+  beschrijving = lines.slice(1, 6)
+    .filter(line => 
+      !line.includes('@') && 
+      !line.includes('http') && 
+      !line.match(/^\s*\d{1,2}:\d{2}/) &&
+      !line.match(/^(ma|di|wo|do|vr|za|zo)\s+\d/) &&
+      line.length > 15 && 
+      line.length < 150
+    )
     .join(' ')
     .substring(0, 200);
+  
+  console.log('Final result - plaats:', plaats, 'datum:', datum);
   
   if (!plaats || !datum) {
     console.log('Onvoldoende data voor:', plaats, datum);
     return null;
   }
   
-  const locatie = adres ? `${adres}, ${postcode} ${plaats}` : `${postcode} ${plaats}`;
+  const locatie = adres ? `${adres}, ${postcode} ${plaats}` : `Centrum, ${postcode} ${plaats}`;
   
   const startDateTime = new Date(`${datum}T${startTijd}`);
   const endDateTime = eindTijd ? new Date(`${datum}T${eindTijd}`) : null;

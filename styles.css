@@ -1,176 +1,578 @@
-body {
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f7f7f7;
+/* Reset and base styles */
+* {
   margin: 0;
-  padding: 2rem;
-  color: #333;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.6;
+  color: #2d3748;
+  background-color: #f7fafc;
 }
 
-h1 {
-  color: #2c3e50;
-  text-align: center;
-  margin-bottom: 2rem;
-  font-size: 2.5rem;
-}
-
-h3 {
-  color: #34495e;
-  margin-bottom: 1rem;
-}
-
-#login-container,
-#main-content {
-  max-width: 600px;
+.container {
+  max-width: 1200px;
   margin: 0 auto;
-  background-color: white;
-  padding: 2rem;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 0 1rem;
 }
 
-#user-info {
+/* Header */
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header .container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #eee;
 }
 
-#user-email {
-  font-weight: bold;
-  margin: 0;
-  color: #1a237e;
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.25rem;
 }
 
-button {
-  background-color: #0077cc;
+.logo-icon {
+  font-size: 1.5rem;
+}
+
+.nav {
+  display: flex;
+  gap: 2rem;
+}
+
+.nav-link {
   color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.2s ease-in-out;
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
 }
 
-button:hover {
-  background-color: #005fa3;
+.nav-link:hover {
+  opacity: 0.8;
 }
 
-#logout-btn {
-  background-color: #e74c3c;
-  padding: 8px 16px;
+/* Hero Section */
+.hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  text-align: center;
+  padding: 4rem 0;
+}
+
+.hero-title {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  line-height: 1.1;
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  opacity: 0.9;
+  margin-bottom: 3rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 3rem;
+  margin-top: 3rem;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat-number {
+  display: block;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #ffd700;
+}
+
+.stat-label {
   font-size: 0.9rem;
+  opacity: 0.8;
 }
 
-#logout-btn:hover {
-  background-color: #c0392b;
+/* Login Section */
+.login-section {
+  padding: 4rem 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
 }
 
-form {
+.login-card {
+  background: white;
+  padding: 3rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.login-card h2 {
+  margin-bottom: 1rem;
+  color: #2d3748;
+}
+
+.login-card p {
+  color: #718096;
+  margin-bottom: 2rem;
+}
+
+/* User Bar */
+.user-bar {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 1rem 0;
+}
+
+.user-bar .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-email {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.user-badge {
+  background: #e6fffa;
+  color: #234e52;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.btn-secondary:hover {
+  background: #cbd5e0;
+}
+
+.btn-small {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1.125rem;
+}
+
+.btn-icon {
+  font-size: 1.125rem;
+}
+
+/* Sections */
+.section-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.section-header h2 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 1rem;
+}
+
+.section-header p {
+  font-size: 1.125rem;
+  color: #718096;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.add-market-section {
+  padding: 4rem 0;
+  background: white;
+}
+
+.markets-section {
+  padding: 4rem 0;
+}
+
+/* Forms */
+.market-form {
+  background: #f7fafc;
+  padding: 2rem;
+  border-radius: 16px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.form-group {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  background-color: #f8f9fa;
-  border-radius: 8px;
 }
 
-input, textarea {
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+label {
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+input, select, textarea {
+  padding: 0.75rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
   font-size: 1rem;
   font-family: inherit;
+  transition: border-color 0.2s;
 }
 
-input:focus, textarea:focus {
+input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: #0077cc;
-  box-shadow: 0 0 0 2px rgba(0, 119, 204, 0.2);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 textarea {
-  min-height: 80px;
   resize: vertical;
+  min-height: 100px;
 }
 
-.hidden {
-  display: none;
+.form-actions {
+  text-align: center;
+  margin-top: 2rem;
 }
 
-#markets-container {
-  display: grid;
+/* Filters */
+.filters {
+  display: flex;
   gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.filter-select, .filter-input {
+  padding: 0.5rem 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.filter-input {
+  min-width: 200px;
+}
+
+/* Market Cards */
+.markets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
 }
 
 .market-card {
-  background-color: #f8f9fa;
+  background: white;
+  border-radius: 16px;
   padding: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.market-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+}
+
+.market-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.market-type-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1rem;
+}
+
+.type-rommelmarkt { background: #e6fffa; color: #234e52; }
+.type-garageverkoop { background: #fef5e7; color: #744210; }
+.type-braderie { background: #e0e7ff; color: #3730a3; }
+.type-kermis { background: #fce7f3; color: #86198f; }
+.type-boerenmarkt { background: #ecfdf5; color: #14532d; }
+.type-antiekmarkt { background: #fef3c7; color: #92400e; }
+.type-feest { background: #fee2e2; color: #991b1b; }
+
+.market-card h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 1rem;
+  line-height: 1.3;
+}
+
+.market-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.market-detail-icon {
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.market-date-time {
+  background: #e6fffa;
+  color: #234e52;
+  padding: 0.75rem;
   border-radius: 8px;
-  border-left: 4px solid #0077cc;
+  margin: 1rem 0;
+  text-align: center;
+  font-weight: 600;
 }
 
-.market-card h4 {
-  margin: 0 0 0.5rem 0;
-  color: #2c3e50;
-}
-
-.market-card .market-location {
-  color: #7f8c8d;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-}
-
-.market-card .market-datetime {
-  color: #e74c3c;
-  font-weight: bold;
-  margin-bottom: 0.5rem;
-}
-
-.market-card .market-description {
-  color: #34495e;
+.market-description {
+  background: #f7fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  margin: 1rem 0;
   font-style: italic;
+  color: #4a5568;
+  border-left: 3px solid #cbd5e0;
+}
+
+.market-added-by {
+  font-size: 0.75rem;
+  color: #a0aec0;
+  text-align: right;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* No Markets */
+.no-markets {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #718096;
+}
+
+.no-markets-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.no-markets h3 {
+  font-size: 1.5rem;
+  color: #4a5568;
   margin-bottom: 0.5rem;
 }
 
-.market-card .market-added-by {
-  font-size: 0.8rem;
-  color: #95a5a6;
-  margin-top: 1rem;
-  border-top: 1px solid #ecf0f1;
-  padding-top: 0.5rem;
+/* Footer */
+.footer {
+  background: #2d3748;
+  color: white;
+  padding: 3rem 0 1rem;
+  margin-top: 4rem;
 }
 
-@media screen and (max-width: 600px) {
-  body {
-    padding: 1rem;
+.footer-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.footer-section h4 {
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #e2e8f0;
+}
+
+.footer-section ul {
+  list-style: none;
+}
+
+.footer-section ul li {
+  margin-bottom: 0.5rem;
+}
+
+.footer-section a {
+  color: #a0aec0;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-section a:hover {
+  color: white;
+}
+
+.footer-bottom {
+  border-top: 1px solid #4a5568;
+  padding-top: 1rem;
+  text-align: center;
+  color: #a0aec0;
+  font-size: 0.875rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1rem;
   }
   
-  h1 {
+  .header .container {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .nav {
+    gap: 1rem;
+  }
+  
+  .hero-title {
     font-size: 2rem;
   }
   
-  #login-container,
-  #main-content {
+  .hero-subtitle {
+    font-size: 1rem;
+  }
+  
+  .hero-stats {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  
+  .login-card {
+    margin: 1rem;
+    padding: 2rem;
+  }
+  
+  .user-bar .container {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .filters {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .filter-input {
+    min-width: auto;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .markets-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-header h2 {
+    font-size: 1.875rem;
+  }
+  
+  .footer-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-title {
+    font-size: 1.75rem;
+  }
+  
+  .market-form {
     padding: 1rem;
   }
   
-  #user-info {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-  
-  button {
-    width: 100%;
-  }
-  
-  #logout-btn {
-    width: auto;
-    align-self: flex-end;
+  .login-card {
+    padding: 1.5rem;
   }
 }

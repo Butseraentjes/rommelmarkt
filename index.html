@@ -19,6 +19,7 @@
         <span class="logo-text">Rommelmarkten.be</span>
       </div>
       <nav class="nav">
+        <a href="#hero" class="nav-link">Home</a>
         <a href="#markten" class="nav-link">Markten</a>
         <a href="#toevoegen" class="nav-link">Toevoegen</a>
         <a href="#contact" class="nav-link">Contact</a>
@@ -27,10 +28,20 @@
   </header>
 
   <!-- Hero Section -->
-  <section class="hero">
+  <section id="hero" class="hero">
     <div class="hero-content">
       <h1 class="hero-title">Ontdek rommelmarkten in je buurt</h1>
       <p class="hero-subtitle">Vind de beste kansen voor unieke vondsten en gezellige markten</p>
+      <div class="hero-actions">
+        <a href="#markten" class="btn btn-primary btn-large">
+          <span class="btn-icon">🔍</span>
+          Bekijk Markten
+        </a>
+        <a href="#toevoegen" class="btn btn-secondary btn-large">
+          <span class="btn-icon">➕</span>
+          Markt Toevoegen
+        </a>
+      </div>
       <div class="hero-stats">
         <div class="stat">
           <span class="stat-number" id="total-markets">0</span>
@@ -194,30 +205,94 @@
     <section id="markten" class="markets-section">
       <div class="container">
         <div class="section-header">
-          <h2>Komende evenementen</h2>
-          <div class="filters">
-            <select id="filter-type" class="filter-select">
-              <option value="">Alle types</option>
-              <option value="rommelmarkt">Rommelmarkten</option>
-              <option value="garageverkoop">Garageverkopen</option>
-              <option value="braderie">Braderieën</option>
-              <option value="kermis">Kermissen</option>
-              <option value="boerenmarkt">Boerenmarkten</option>
-              <option value="antiekmarkt">Antiekmarkten</option>
-              <option value="feest">Feesten</option>
-            </select>
-            <input type="text" id="filter-location" placeholder="Zoek op locatie..." class="filter-input">
+          <h2>Alle Rommelmarkten & Evenementen</h2>
+          <p>Ontdek de volledige lijst van komende evenementen in jouw regio</p>
+        </div>
+        
+        <!-- Enhanced Filters -->
+        <div class="filters-container">
+          <div class="filters-row">
+            <div class="filter-group">
+              <label for="filter-type">Type evenement:</label>
+              <select id="filter-type" class="filter-select">
+                <option value="">Alle types</option>
+                <option value="rommelmarkt">🏪 Rommelmarkten</option>
+                <option value="garageverkoop">🏠 Garageverkopen</option>
+                <option value="braderie">🛍️ Braderieën</option>
+                <option value="kermis">🎡 Kermissen</option>
+                <option value="boerenmarkt">🥕 Boerenmarkten</option>
+                <option value="antiekmarkt">🏺 Antiekmarkten</option>
+                <option value="feest">🎉 Feesten</option>
+              </select>
+            </div>
+            
+            <div class="filter-group">
+              <label for="filter-location">Locatie:</label>
+              <input type="text" id="filter-location" placeholder="Stad, postcode of straat..." class="filter-input">
+            </div>
+            
+            <div class="filter-group">
+              <label for="filter-date">Periode:</label>
+              <select id="filter-date" class="filter-select">
+                <option value="">Alle data</option>
+                <option value="today">Vandaag</option>
+                <option value="tomorrow">Morgen</option>
+                <option value="week">Deze week</option>
+                <option value="weekend">Dit weekend</option>
+                <option value="month">Deze maand</option>
+              </select>
+            </div>
+            
+            <div class="filter-group">
+              <button id="clear-filters" class="btn btn-secondary">
+                <span class="btn-icon">🗑️</span>
+                Wis filters
+              </button>
+            </div>
+          </div>
+          
+          <!-- Results info -->
+          <div class="results-info">
+            <span id="results-count">0 evenementen gevonden</span>
+            <div class="view-toggle">
+              <button id="view-grid" class="view-btn active">
+                <span class="btn-icon">▦</span>
+              </button>
+              <button id="view-list" class="view-btn">
+                <span class="btn-icon">☰</span>
+              </button>
+            </div>
           </div>
         </div>
         
+        <!-- Loading state -->
+        <div id="loading-markets" class="loading-state" style="display: none;">
+          <div class="loading-spinner"></div>
+          <p>Evenementen laden...</p>
+        </div>
+        
+        <!-- Markets grid -->
         <div id="markets-container" class="markets-grid">
           <!-- Markets will be loaded here -->
         </div>
         
+        <!-- No results state -->
         <div id="no-markets" class="no-markets" style="display: none;">
           <div class="no-markets-icon">📅</div>
           <h3>Geen evenementen gevonden</h3>
           <p>Er zijn momenteel geen evenementen die voldoen aan je zoekcriteria.</p>
+          <button id="suggest-event" class="btn btn-primary">
+            <span class="btn-icon">➕</span>
+            Evenement voorstellen
+          </button>
+        </div>
+        
+        <!-- Load more button -->
+        <div id="load-more-container" class="load-more-container" style="display: none;">
+          <button id="load-more-btn" class="btn btn-secondary btn-large">
+            <span class="btn-icon">⬇️</span>
+            Meer laden
+          </button>
         </div>
       </div>
     </section>

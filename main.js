@@ -21,6 +21,10 @@ import {
   doc
 } from './firebase.js';
 
+console.log('🚀 Main.js geladen!');
+console.log('Firebase auth:', auth);
+console.log('Event types:', eventTypes);
+
 // DOM elementen - ALLE IN ÉÉN KEER
 const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
@@ -56,6 +60,13 @@ const bulkDataTextarea = document.getElementById('bulk-data');
 const clearAllBtn = document.getElementById('clear-all-btn');
 const importResults = document.getElementById('import-results');
 
+console.log('DOM elementen:', {
+  loginBtn: !!loginBtn,
+  loginContainer: !!loginContainer,
+  mainContent: !!mainContent,
+  heroMarketsContainer: !!heroMarketsContainer
+});
+
 // Global variables
 let allMarkets = [];
 let filteredMarkets = [];
@@ -67,13 +78,38 @@ let currentPage = 1;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('🎯 DOM Content Loaded!');
   setupEventListeners();
   updateStats();
+  
+  // Load markets immediately for public users
+  if (!currentUser) {
+    console.log('🌍 Loading public markets...');
+    loadMarketsPublic();
+  }
 });
+
+// Also run immediately in case DOM is already loaded
+if (document.readyState === 'loading') {
+  console.log('📄 Document still loading...');
+} else {
+  console.log('📄 Document already loaded, initializing...');
+  setupEventListeners();
+  updateStats();
+  loadMarketsPublic();
+}
 
 // Event listeners
 function setupEventListeners() {
-  if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+  console.log('🔧 Setting up event listeners...');
+  
+  if (loginBtn) {
+    console.log('✅ Login button found, adding listener');
+    loginBtn.addEventListener('click', handleLogin);
+  } else {
+    console.error('❌ Login button not found!');
+  }
+  
   if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
   if (marketForm) marketForm.addEventListener('submit', handleAddMarket);
   
@@ -114,23 +150,34 @@ function setupEventListeners() {
       }
     });
   });
+  
+  console.log('✅ Event listeners setup complete!');
 }
 
 // Authentication functions
 async function handleLogin() {
+  console.log('🔐 Login button clicked!');
+  
+  if (!loginBtn) {
+    console.error('❌ Login button not found');
+    return;
+  }
+  
   try {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="btn-icon">⏳</span> Inloggen...';
+    
+    console.log('🚀 Starting Google login...');
     
     provider.setCustomParameters({
       prompt: 'select_account'
     });
     
     const result = await signInWithPopup(auth, provider);
-    console.log('Login succesvol:', result.user.email);
+    console.log('✅ Login succesvol:', result.user.email);
     
   } catch (err) {
-    console.error('Login fout:', err);
+    console.error('❌ Login fout:', err);
     
     let errorMessage = 'Er ging iets mis bij het inloggen. Probeer opnieuw.';
     
@@ -143,8 +190,10 @@ async function handleLogin() {
     alert(errorMessage);
     
   } finally {
-    loginBtn.disabled = false;
-    loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
+    }
   }
 }
 
@@ -158,16 +207,22 @@ async function handleLogout() {
 
 // Auth state observer
 onAuthStateChanged(auth, (user) => {
+  console.log('🔄 Auth state changed:', user ? `Logged in as ${user.email}` : 'Logged out');
+  
   currentUser = user;
   if (user) {
     // User is logged in
-    loginContainer.style.display = 'none';
-    mainContent.style.display = 'block';
+    console.log('✅ User logged in, showing main content');
+    
+    if (loginContainer) loginContainer.style.display = 'none';
+    if (mainContent) mainContent.style.display = 'block';
     if (userBar) userBar.style.display = 'block';
-    userEmail.textContent = user.email;
+    if (userEmail) userEmail.textContent = user.email;
     
     // Check if user is admin
     isAdmin = adminEmails.includes(user.email);
+    console.log('👑 Admin status:', isAdmin);
+    
     if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
     
     // Show all sections for logged in users
@@ -177,8 +232,10 @@ onAuthStateChanged(auth, (user) => {
     loadMarkets();
   } else {
     // User is logged out
-    loginContainer.style.display = 'flex';
-    mainContent.style.display = 'block'; // Still show main content
+    console.log('👤 User logged out, showing login');
+    
+    if (loginContainer) loginContainer.style.display = 'flex';
+    if (mainContent) mainContent.style.display = 'block'; // Still show main content
     if (userBar) userBar.style.display = 'none'; // Hide user bar
     
     // Hide admin and add sections for logged out users

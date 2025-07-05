@@ -398,16 +398,37 @@ function render(){if(!$['marketsContainer'])return;const start=(currentPage-1)*P
   if($['loadMoreBtn'])$['loadMoreBtn'].textContent=`Meer laden (${Math.max(c-currentPage*PER_PAGE,0)})`;
 }
 
-function card(m){const a=document.createElement('a');a.className='market-card';a.href=`event.html?id=${m.id}`;a.setAttribute('aria-label',m.naam);
-  const evt=eventTypes[m.type]||eventTypes.rommelmarkt;const fdt=formatDateTime(m.datumStart);
+function card(m){
+  const a=document.createElement('a');
+  a.className='market-card';
+  a.href=`event.html?id=${m.id}`;
+  a.setAttribute('aria-label',m.naam);
+  
+  const evt=eventTypes[m.type]||eventTypes.rommelmarkt;
+  
+  // Veilige datum formattering
+  let fdt;
+  try {
+    fdt = formatDateTime(m.datumStart);
+  } catch (e) {
+    console.error('Error formatting date for:', m.naam, e);
+    // Fallback naar basis datum formatting
+    const date = dateFromFS(m.datumStart);
+    fdt = {
+      dayName: date.toLocaleDateString('nl-NL', { weekday: 'long' }),
+      time: date.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+  
   a.innerHTML=`${m.imageUrl?`<img src="${m.imageUrl}" alt="${escapeHtml(m.naam)}" class="market-image" loading="lazy">`:`<div class="market-image" style="background:linear-gradient(135deg,${getGradient(m.type)});display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;">${evt.icon}</div>`}
     <div class="market-card-content">
       <div class="market-type-badge type-${m.type}">${evt.icon} ${evt.label}</div>
-      <h3>${escapeHtml(m.naam)}</h3>
+      <h3>${escapeHtml(m.naam || 'Onbekend evenement')}</h3>
       <p style="color:#555;font-size:.875rem;">${fdt.dayName} • ${fdt.time}</p>
-      <p style="color:#777;font-size:.75rem;">${escapeHtml(m.locatie)}</p>
+      <p style="color:#777;font-size:.75rem;">${escapeHtml(m.locatie || 'Locatie onbekend')}</p>
     </div>`;
-  return a;}
+  return a;
+}
 
 // ──────────────────────────────────────────────────────────────
 // 📊 Hero & stats

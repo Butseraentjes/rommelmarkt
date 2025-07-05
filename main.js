@@ -15,7 +15,10 @@ import {
   formatDate,
   formatTime,
   formatDateTime,
-  eventTypes
+  eventTypes,
+  adminEmails,
+  deleteDoc,
+  doc
 } from './firebase.js';
 
 // DOM elementen
@@ -32,9 +35,17 @@ const filterLocation = document.getElementById('filter-location');
 const totalMarketsSpan = document.getElementById('total-markets');
 const upcomingMarketsSpan = document.getElementById('upcoming-markets');
 
+// Admin elements
+const adminPanel = document.getElementById('admin-panel');
+const bulkImportForm = document.getElementById('bulk-import-form');
+const bulkDataTextarea = document.getElementById('bulk-data');
+const clearAllBtn = document.getElementById('clear-all-btn');
+const importResults = document.getElementById('import-results');
+
 // Global variables
 let allMarkets = [];
 let currentUser = null;
+let isAdmin = false;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -49,6 +60,10 @@ function setupEventListeners() {
   marketForm.addEventListener('submit', handleAddMarket);
   filterType.addEventListener('change', filterMarkets);
   filterLocation.addEventListener('input', debounce(filterMarkets, 300));
+  
+  // Admin event listeners
+  bulkImportForm.addEventListener('submit', handleBulkImport);
+  clearAllBtn.addEventListener('click', handleClearAll);
   
   // Smooth scrolling for navigation links
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -111,11 +126,18 @@ onAuthStateChanged(auth, (user) => {
     loginContainer.style.display = 'none';
     mainContent.style.display = 'block';
     userEmail.textContent = user.email;
+    
+    // Check if user is admin
+    isAdmin = adminEmails.includes(user.email);
+    adminPanel.style.display = isAdmin ? 'block' : 'none';
+    
     loadMarkets();
   } else {
     loginContainer.style.display = 'flex';
     mainContent.style.display = 'none';
+    adminPanel.style.display = 'none';
     currentUser = null;
+    isAdmin = false;
   }
 });
 
@@ -530,4 +552,298 @@ function animateCounter(element, targetValue) {
   }
   
   requestAnimationFrame(update);
+}
+
+// Admin Functions
+async function handleBulkImport(e) {
+  e.preventDefault();
+  
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const rawData = bulkDataTextarea.value.trim();
+  if (!rawData) {
+    showImportResult('Geen data ingevoerd.', 'error');
+    return;
+  }
+
+  try {
+    showImportResult('Data verwerken...', 'processing');
+    
+    const markets = parseRommelmarktData(rawData);
+    
+    if (markets.length === 0) {
+      showImportResult('Geen geldige rommelmarkten gevonden in de data.', 'error');
+      return;
+    }
+
+    showImportResult(`${markets.length} rommelmarkten gevonden. Importeren...`, 'processing');
+    
+    let imported = 0;
+    let errors = 0;
+    
+    for (let i = 0; i < markets.length; i++) {
+      try {
+        const marketData = {
+          ...markets[i],
+          userId: currentUser.uid,
+          email: currentUser.email,
+          toegevoegdOp: Timestamp.now(),
+          status: 'actief',
+          bron: 'bulk_import'
+        };
+        
+        await addDoc(collection(db, 'rommelmarkten'), marketData);
+        imported++;
+        
+        // Update progress
+        updateImportProgress(i + 1, markets.length);
+        
+      } catch (error) {
+        console.error('Fout bij importeren van markt:', error);
+        errors++;
+      }
+    }
+    
+    const resultMsg = `Import voltooid! ✅ ${imported} geïmporteerd, ❌ ${errors} fouten.`;
+    showImportResult(resultMsg, 'success');
+    
+    // Clear textarea and reload markets
+    bulkDataTextarea.value = '';
+    loadMarkets();
+    
+  } catch (error) {
+    console.error('Bulk import fout:', error);
+    showImportResult(`Fout bij importeren: ${error.message}`, 'error');
+  }
+}
+
+function parseRommelmarktData(rawData) {
+  const markets = [];
+  
+  // Split data into lines and process
+  const lines = rawData.split('\n').filter(line => line.trim());
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Skip empty lines and headers
+    if (!line || line.includes('Rommelmarkten') || line.includes('Toggle navigation')) {
+      continue;
+    }
+    
+    try {
+      const market = parseMarketLine(line);
+      if (market) {
+        markets.push(market);
+      }
+    } catch (error) {
+      console.warn('Kon regel niet verwerken:', line, error);
+    }
+  }
+  
+  return markets;
+}
+
+function parseMarketLine(line) {
+  // Basis regex patterns voor verschillende data formaten
+  const patterns = [
+    // Pattern: PLAATS (postcode) AdresType evenementDatum tijd Type evenement
+    /^([A-Z\s-]+)\s*\((\d{4})\)\s*([^A-Z]+?)([A-Z].*?)(\d{1,2}\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)|\d{1,2}\s+\w+\s+\d{4})\s+(\d{1,2}u\d{2}.*?)([A-Z].*?)$/i,
+    
+    // Pattern voor andere formaten
+    /^([A-Z\s-]+)\s*\((\d{4})\)\s*(.*?)(\d{1,2}\s+\w+\s+\d{4})\s+(.*?)$/i
+  ];
+  
+  // Probeer verschillende patterns
+  for (const pattern of patterns) {
+    const match = line.match(pattern);
+    if (match) {
+      return extractMarketInfo(match, line);
+    }
+  }
+  
+  // Fallback: probeer simpele extractie
+  return extractMarketInfoSimple(line);
+}
+
+function extractMarketInfo(match, originalLine) {
+  try {
+    const [, plaats, postcode, adres, naam, datumStr, tijdStr, type] = match;
+    
+    // Parse datum
+    const datum = parseDutchDate(datumStr);
+    if (!datum) return null;
+    
+    // Parse tijd
+    const { startTijd, eindTijd } = parseTijden(tijdStr);
+    
+    // Bepaal type
+    const evenementType = bepaalType(type || naam || originalLine);
+    
+    return {
+      naam: naam?.trim() || `Rommelmarkt ${plaats}`,
+      type: evenementType,
+      locatie: `${adres?.trim() || 'Centrum'}, ${postcode} ${plaats}`,
+      datumStart: Timestamp.fromDate(new Date(`${datum}T${startTijd || '09:00'}`)),
+      datumEind: eindTijd ? Timestamp.fromDate(new Date(`${datum}T${eindTijd}`)) : null,
+      beschrijving: `Automatisch geïmporteerd evenement in ${plaats}`,
+      organisator: '',
+      contact: '',
+      aantalStanden: null,
+      standgeld: null
+    };
+  } catch (error) {
+    console.warn('Fout bij extracten van marktinfo:', error);
+    return null;
+  }
+}
+
+function extractMarketInfoSimple(line) {
+  // Simpele fallback extractie
+  const words = line.split(/\s+/);
+  let plaats = '';
+  let postcode = '';
+  let datum = null;
+  
+  // Zoek postcode
+  for (let word of words) {
+    if (/^\(\d{4}\)$/.test(word)) {
+      postcode = word.replace(/[()]/g, '');
+      break;
+    }
+  }
+  
+  // Zoek plaats (woorden voor postcode)
+  const postcodeIndex = words.findIndex(w => w.includes(postcode));
+  if (postcodeIndex > 0) {
+    plaats = words.slice(0, postcodeIndex).join(' ').replace(/[^A-Za-z\s-]/g, '');
+  }
+  
+  // Zoek datum
+  const datePattern = /(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|\w+)\s+(\d{4})/i;
+  const dateMatch = line.match(datePattern);
+  if (dateMatch) {
+    datum = parseDutchDate(dateMatch[0]);
+  }
+  
+  if (!plaats || !datum) return null;
+  
+  return {
+    naam: `Rommelmarkt ${plaats}`,
+    type: 'rommelmarkt',
+    locatie: `Centrum, ${postcode} ${plaats}`,
+    datumStart: Timestamp.fromDate(new Date(`${datum}T09:00`)),
+    datumEind: null,
+    beschrijving: `Automatisch geïmporteerd evenement in ${plaats}`,
+    organisator: '',
+    contact: '',
+    aantalStanden: null,
+    standgeld: null
+  };
+}
+
+function parseDutchDate(dateStr) {
+  const maanden = {
+    'januari': '01', 'februari': '02', 'maart': '03', 'april': '04',
+    'mei': '05', 'juni': '06', 'juli': '07', 'augustus': '08',
+    'september': '09', 'oktober': '10', 'november': '11', 'december': '12',
+    'jan': '01', 'feb': '02', 'mrt': '03', 'apr': '04',
+    'jun': '06', 'jul': '07', 'aug': '08', 'sep': '09',
+    'okt': '10', 'nov': '11', 'dec': '12'
+  };
+  
+  // Pattern: "6 juli 2025" of "12 juli 2025"
+  const match = dateStr.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/i);
+  if (match) {
+    const [, dag, maand, jaar] = match;
+    const maandNr = maanden[maand.toLowerCase()];
+    if (maandNr) {
+      return `${jaar}-${maandNr}-${dag.padStart(2, '0')}`;
+    }
+  }
+  
+  return null;
+}
+
+function parseTijden(tijdStr) {
+  let startTijd = '09:00';
+  let eindTijd = null;
+  
+  // Pattern: "08u00 - 16u00" of "9:00 - 17:00"
+  const tijdMatch = tijdStr.match(/(\d{1,2})[u:](\d{2})(?:\s*-\s*(\d{1,2})[u:](\d{2}))?/);
+  if (tijdMatch) {
+    const [, startUur, startMin, eindUur, eindMin] = tijdMatch;
+    startTijd = `${startUur.padStart(2, '0')}:${startMin}`;
+    if (eindUur && eindMin) {
+      eindTijd = `${eindUur.padStart(2, '0')}:${eindMin}`;
+    }
+  }
+  
+  return { startTijd, eindTijd };
+}
+
+function bepaalType(text) {
+  const lowerText = text.toLowerCase();
+  
+  if (lowerText.includes('garage')) return 'garageverkoop';
+  if (lowerText.includes('braderie')) return 'braderie';
+  if (lowerText.includes('kermis')) return 'kermis';
+  if (lowerText.includes('boerenmarkt')) return 'boerenmarkt';
+  if (lowerText.includes('antiek') || lowerText.includes('brocante')) return 'antiekmarkt';
+  if (lowerText.includes('feest')) return 'feest';
+  
+  return 'rommelmarkt'; // default
+}
+
+function showImportResult(message, type) {
+  importResults.style.display = 'block';
+  importResults.className = `import-results ${type}`;
+  importResults.innerHTML = `
+    <strong>${type === 'error' ? '❌ Fout:' : type === 'success' ? '✅ Succes:' : '⏳ Bezig:'}</strong> ${message}
+    ${type === 'processing' ? '<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>' : ''}
+  `;
+}
+
+function updateImportProgress(current, total) {
+  const progressFill = document.getElementById('progress-fill');
+  if (progressFill) {
+    const percentage = (current / total) * 100;
+    progressFill.style.width = `${percentage}%`;
+  }
+}
+
+async function handleClearAll() {
+  if (!isAdmin) {
+    alert('Je hebt geen admin rechten.');
+    return;
+  }
+
+  const confirmed = confirm('⚠️ WAARSCHUWING: Dit zal ALLE rommelmarkten verwijderen! Ben je zeker?');
+  if (!confirmed) return;
+  
+  const doubleConfirm = confirm('🚨 LAATSTE KANS: Dit kan niet ongedaan gemaakt worden. Alle data wordt permanent verwijderd!');
+  if (!doubleConfirm) return;
+
+  try {
+    showImportResult('Alle data verwijderen...', 'processing');
+    
+    const q = query(collection(db, 'rommelmarkten'));
+    const querySnapshot = await getDocs(q);
+    
+    let deleted = 0;
+    for (const docSnapshot of querySnapshot.docs) {
+      await deleteDoc(doc(db, 'rommelmarkten', docSnapshot.id));
+      deleted++;
+    }
+    
+    showImportResult(`Alle data verwijderd! ${deleted} evenementen gewist.`, 'success');
+    loadMarkets();
+    
+  } catch (error) {
+    console.error('Fout bij verwijderen:', error);
+    showImportResult(`Fout bij verwijderen: ${error.message}`, 'error');
+  }
 }

@@ -64,7 +64,10 @@ console.log('DOM elementen:', {
   loginBtn: !!loginBtn,
   loginContainer: !!loginContainer,
   mainContent: !!mainContent,
-  heroMarketsContainer: !!heroMarketsContainer
+  heroMarketsContainer: !!heroMarketsContainer,
+  marketsContainer: !!marketsContainer,
+  loadingMarketsDiv: !!loadingMarketsDiv,
+  noMarketsDiv: !!noMarketsDiv
 });
 
 // Global variables
@@ -110,7 +113,9 @@ function setupEventListeners() {
   
   // Voeg event listeners toe voor login knoppen in de navigatie (indien aanwezig)
   const navLoginBtns = document.querySelectorAll('.nav-login-btn, .header-login-btn, .show-login');
-  navLoginBtns.forEach(btn => {
+  console.log('🔍 Found login buttons:', navLoginBtns.length);
+  navLoginBtns.forEach((btn, index) => {
+    console.log(`📌 Adding listener to login button ${index + 1}`);
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       showLoginInterface();
@@ -439,32 +444,81 @@ async function prepareMarketData(formData) {
   };
 }
 
-// Load markets for public viewing (when not logged in)
+// DEBUG VERSION - Load markets for public viewing (when not logged in)
 async function loadMarketsPublic() {
+  console.log('🚀 loadMarketsPublic gestart');
+  
   try {
     showLoadingState();
+    console.log('📊 Loading state getoond');
+    
+    // Test of Firebase verbinding werkt
+    console.log('🔗 Testen Firebase verbinding...');
+    console.log('DB object:', db);
+    console.log('Collection functie:', collection);
     
     let q;
     try {
+      console.log('📋 Proberen query met orderBy datumStart...');
       q = query(
         collection(db, 'rommelmarkten'),
         orderBy('datumStart', 'asc')
       );
+      console.log('✅ Query succesvol gemaakt');
     } catch (indexError) {
+      console.log('❌ Index fout, proberen backup query...');
+      console.error('Index error:', indexError);
       q = query(
         collection(db, 'rommelmarkten'),
         orderBy('toegevoegdOp', 'desc')
       );
+      console.log('✅ Backup query succesvol gemaakt');
     }
     
+    console.log('🔍 Uitvoeren van query...');
     const querySnapshot = await getDocs(q);
+    console.log('📊 Query snapshot ontvangen:', querySnapshot);
+    console.log('📊 Aantal documenten:', querySnapshot.size);
+    
+    if (querySnapshot.empty) {
+      console.log('⚠️ Geen documenten gevonden in database');
+      // Toon debug info
+      if (marketsContainer) {
+        marketsContainer.innerHTML = `
+          <div style="text-align: center; padding: 2rem; background: #f8f9fa; border-radius: 8px;">
+            <h3>🔍 Debug Info</h3>
+            <p><strong>Database status:</strong> Verbonden</p>
+            <p><strong>Query uitgevoerd:</strong> Ja</p>
+            <p><strong>Documenten gevonden:</strong> 0</p>
+            <p><strong>Collection naam:</strong> rommelmarkten</p>
+            <p style="color: #666; font-size: 0.9rem;">
+              Dit betekent dat de database leeg is of dat er een probleem is met de Firestore regels.
+            </p>
+          </div>
+        `;
+      }
+      if (loadingMarketsDiv) loadingMarketsDiv.style.display = 'none';
+      return;
+    }
+    
     const marketsMap = new Map(); // Voor duplicate filtering
+    let processedCount = 0;
 
     querySnapshot.forEach((doc) => {
-      const market = { id: doc.id, ...doc.data() };
+      processedCount++;
+      const marketData = doc.data();
+      console.log(`📋 Document ${processedCount}:`, {
+        id: doc.id,
+        naam: marketData.naam,
+        datumStart: marketData.datumStart,
+        status: marketData.status
+      });
       
-      // Voor publieke weergave: toon alle actieve markten (ook verleden)
+      const market = { id: doc.id, ...marketData };
+      
+      // Voor publieke weergave: toon alle actieve markten
       const isActive = !market.status || market.status === 'actief';
+      console.log(`📊 Market ${market.naam} - Active: ${isActive}`);
       
       if (isActive) {
         // Filter duplicates op basis van naam + locatie + datum
@@ -472,24 +526,55 @@ async function loadMarketsPublic() {
         
         if (!marketsMap.has(uniqueKey)) {
           marketsMap.set(uniqueKey, market);
+          console.log(`✅ Market toegevoegd: ${market.naam}`);
+        } else {
+          console.log(`🔄 Duplicate geskipt: ${market.naam}`);
         }
+      } else {
+        console.log(`❌ Inactieve market geskipt: ${market.naam}`);
       }
     });
 
     allMarkets = Array.from(marketsMap.values());
+    console.log('📊 Finale markten array:', allMarkets.length);
+    console.log('📊 Markten details:', allMarkets.map(m => ({ naam: m.naam, datum: m.datumStart.toDate() })));
 
     // Sorteer op datum (meest recente eerst voor debug)
     allMarkets.sort((a, b) => b.datumStart.toDate() - a.datumStart.toDate());
 
     currentPage = 1;
+    
+    console.log('🎯 Applying filters...');
     applyFilters();
+    
+    console.log('📊 Updating stats...');
     updateStats();
-    loadHeroMarkets(); // Load markets for hero section
+    
+    console.log('🎪 Loading hero markets...');
+    loadHeroMarkets();
 
-    console.log('Publieke markten geladen (na duplicate filtering):', allMarkets.length);
+    console.log('✅ Publieke markten geladen (na duplicate filtering):', allMarkets.length);
 
   } catch (error) {
-    console.error('Fout bij laden publieke evenementen:', error);
+    console.error('❌ Fout bij laden publieke evenementen:', error);
+    console.error('Error stack:', error.stack);
+    
+    // Toon debug error info
+    if (marketsContainer) {
+      marketsContainer.innerHTML = `
+        <div style="text-align: center; padding: 2rem; background: #fee; border-radius: 8px; border: 1px solid #fcc;">
+          <h3>❌ Fout bij laden</h3>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p><strong>Type:</strong> ${error.code || 'Onbekend'}</p>
+          <details style="margin-top: 1rem; text-align: left;">
+            <summary>Technische details</summary>
+            <pre style="background: #f5f5f5; padding: 1rem; overflow: auto; font-size: 0.8rem;">${error.stack}</pre>
+          </details>
+        </div>
+      `;
+    }
+    
+    if (loadingMarketsDiv) loadingMarketsDiv.style.display = 'none';
     showErrorState();
   }
 }
@@ -601,14 +686,18 @@ async function loadMarkets() {
 }
 
 function showLoadingState() {
+  console.log('📊 showLoadingState called');
   if (loadingMarketsDiv) {
     loadingMarketsDiv.style.display = 'block';
+    console.log('✅ Loading div shown');
   }
   if (marketsContainer) {
     marketsContainer.style.display = 'none';
+    console.log('🚫 Markets container hidden');
   }
   if (noMarketsDiv) {
     noMarketsDiv.style.display = 'none';
+    console.log('🚫 No markets div hidden');
   }
   if (loadMoreContainer) {
     loadMoreContainer.style.display = 'none';
@@ -616,11 +705,19 @@ function showLoadingState() {
 }
 
 function applyFilters() {
-  if (!allMarkets) return;
+  console.log('🎯 applyFilters gestart');
+  console.log('📊 allMarkets length:', allMarkets ? allMarkets.length : 'undefined');
+  
+  if (!allMarkets) {
+    console.log('❌ allMarkets is undefined/null');
+    return;
+  }
   
   const typeFilter = filterType ? filterType.value.toLowerCase() : '';
   const locationFilter = filterLocation ? filterLocation.value.toLowerCase() : '';
   const dateFilter = filterDate ? filterDate.value : '';
+  
+  console.log('🔍 Filters:', { typeFilter, locationFilter, dateFilter });
   
   filteredMarkets = allMarkets.filter(market => {
     // Type filter
@@ -670,37 +767,63 @@ function applyFilters() {
     return true;
   });
   
+  console.log('📊 Filtered markets count:', filteredMarkets.length);
+  
   currentPage = 1;
   displayMarkets();
   updateResultsInfo();
 }
 
 function displayMarkets() {
-  if (loadingMarketsDiv) loadingMarketsDiv.style.display = 'none';
+  console.log('🎬 displayMarkets called');
+  console.log('📊 filteredMarkets:', filteredMarkets ? filteredMarkets.length : 'undefined');
+  
+  if (loadingMarketsDiv) {
+    loadingMarketsDiv.style.display = 'none';
+    console.log('🚫 Loading div hidden');
+  }
   
   if (!filteredMarkets || filteredMarkets.length === 0) {
-    if (marketsContainer) marketsContainer.style.display = 'none';
-    if (noMarketsDiv) noMarketsDiv.style.display = 'block';
-    if (loadMoreContainer) loadMoreContainer.style.display = 'none';
+    console.log('❌ No filtered markets to display');
+    if (marketsContainer) {
+      marketsContainer.style.display = 'none';
+      console.log('🚫 Markets container hidden (no markets)');
+    }
+    if (noMarketsDiv) {
+      noMarketsDiv.style.display = 'block';
+      console.log('✅ No markets div shown');
+    }
+    if (loadMoreContainer) {
+      loadMoreContainer.style.display = 'none';
+    }
     return;
   }
   
-  if (noMarketsDiv) noMarketsDiv.style.display = 'none';
+  console.log('✅ Displaying markets');
+  if (noMarketsDiv) {
+    noMarketsDiv.style.display = 'none';
+    console.log('🚫 No markets div hidden');
+  }
   if (marketsContainer) {
     marketsContainer.style.display = currentView === 'grid' ? 'grid' : 'block';
     marketsContainer.className = currentView === 'grid' ? 'markets-grid' : 'markets-list';
+    console.log(`✅ Markets container shown in ${currentView} view`);
   }
   
   const startIndex = (currentPage - 1) * marketsPerPage;
   const endIndex = Math.min(startIndex + marketsPerPage, filteredMarkets.length);
   const marketsToShow = filteredMarkets.slice(0, endIndex);
   
+  console.log(`📊 Showing ${marketsToShow.length} markets (${startIndex} to ${endIndex})`);
+  
   if (marketsContainer) {
     marketsContainer.innerHTML = '';
-    marketsToShow.forEach(market => {
+    marketsToShow.forEach((market, index) => {
+      console.log(`🏪 Creating card for: ${market.naam}`);
       const marketElement = createMarketCard(market);
       marketsContainer.appendChild(marketElement);
     });
+    console.log('✅ All market cards added to container');
   }
   
   if (loadMoreContainer && loadMoreBtn) {
@@ -765,6 +888,78 @@ function createGridView(market, eventType, dateTime, endTime) {
       </div>
       
       <h3>${escapeHtml(market.naam)}</h3>
+      
+      <div class="market-date-time">
+        📅 ${dateTime.dayName}
+        <br>
+        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
+      </div>
+      
+      <div class="market-details-grid">
+        <div class="market-detail">
+          <span class="market-detail-icon">📍</span>
+          <span>${escapeHtml(market.locatie)}</span>
+        </div>
+        
+        ${market.organisator ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">👥</span>
+            <span>${escapeHtml(market.organisator)}</span>
+          </div>
+        ` : ''}
+        
+        ${market.aantalStanden ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">🏪</span>
+            <span>${market.aantalStanden} standjes</span>
+          </div>
+        ` : ''}
+        
+        ${market.standgeld ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">💰</span>
+            <span>€${market.standgeld.toFixed(2)} per meter</span>
+          </div>
+        ` : ''}
+        
+        ${market.contact ? `
+          <div class="market-detail">
+            <span class="market-detail-icon">📞</span>
+            <span>${escapeHtml(market.contact)}</span>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${market.beschrijving ? `
+        <div class="market-description">
+          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
+        </div>
+      ` : ''}
+    </div>
+    
+    <div class="market-footer">
+      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
+    </div>
+  `;
+}
+
+function createListView(market, eventType, dateTime, endTime) {
+  const hasImage = market.imageUrl && market.imageUrl !== '';
+  
+  return `
+    ${hasImage ? `
+      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
+    ` : `
+      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
+        ${eventType.icon}
+      </div>
+    `}
+    
+    <div class="market-info">
+      <div class="market-type-badge ${eventType.color}">
+        ${eventType.icon} ${eventType.label}
+      </div>
+      <h3>${escapeHtml(market.naam)}</h3>
       <div class="market-detail">
         <span class="market-detail-icon">📍</span>
         <span>${escapeHtml(market.locatie)}</span>
@@ -785,12 +980,18 @@ function createGridView(market, eventType, dateTime, endTime) {
 
 // Load markets for hero section
 function loadHeroMarkets() {
-  if (!heroMarketsContainer) return;
+  console.log('🎪 loadHeroMarkets called');
+  if (!heroMarketsContainer) {
+    console.log('❌ heroMarketsContainer not found');
+    return;
+  }
   
   // Get next 3 upcoming markets
   const upcomingMarkets = allMarkets
     .filter(market => market.datumStart.toDate() > new Date())
     .slice(0, 3);
+  
+  console.log('🎪 Upcoming markets for hero:', upcomingMarkets.length);
   
   heroMarketsContainer.innerHTML = '';
   
@@ -804,7 +1005,8 @@ function loadHeroMarkets() {
     return;
   }
   
-  upcomingMarkets.forEach(market => {
+  upcomingMarkets.forEach((market, index) => {
+    console.log(`🎪 Adding hero market ${index + 1}: ${market.naam}`);
     const eventType = eventTypes[market.type] || eventTypes.rommelmarkt;
     const dateTime = formatDateTime(market.datumStart);
     const endTime = market.datumEind ? formatTime(market.datumEind) : null;
@@ -839,6 +1041,8 @@ function loadHeroMarkets() {
     
     heroMarketsContainer.appendChild(heroCard);
   });
+  
+  console.log('✅ Hero markets loaded');
 }
 
 // Image upload handling
@@ -923,6 +1127,7 @@ function updateResultsInfo() {
     const count = filteredMarkets.length;
     const word = count === 1 ? 'evenement' : 'evenementen';
     resultsCount.textContent = `${count} ${word} gevonden`;
+    console.log(`📊 Results info updated: ${count} ${word}`);
   }
 }
 
@@ -1381,76 +1586,64 @@ async function deleteMarket(marketId) {
 // Make deleteMarket globally accessible for onclick handlers
 if (typeof window !== 'undefined') {
   window.deleteMarket = deleteMarket;
-}(market.naam)}</h3>
-      
-      <div class="market-date-time">
-        📅 ${dateTime.dayName}
-        <br>
-        🕐 ${dateTime.time}${endTime ? ` - ${endTime}` : ''}
-      </div>
-      
-      <div class="market-details-grid">
-        <div class="market-detail">
-          <span class="market-detail-icon">📍</span>
-          <span>${escapeHtml(market.locatie)}</span>
-        </div>
-        
-        ${market.organisator ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">👥</span>
-            <span>${escapeHtml(market.organisator)}</span>
-          </div>
-        ` : ''}
-        
-        ${market.aantalStanden ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">🏪</span>
-            <span>${market.aantalStanden} standjes</span>
-          </div>
-        ` : ''}
-        
-        ${market.standgeld ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">💰</span>
-            <span>€${market.standgeld.toFixed(2)} per meter</span>
-          </div>
-        ` : ''}
-        
-        ${market.contact ? `
-          <div class="market-detail">
-            <span class="market-detail-icon">📞</span>
-            <span>${escapeHtml(market.contact)}</span>
-          </div>
-        ` : ''}
-      </div>
-      
-      ${market.beschrijving ? `
-        <div class="market-description">
-          ${escapeHtml(market.beschrijving.substring(0, 120))}${market.beschrijving.length > 120 ? '...' : ''}
-        </div>
-      ` : ''}
-    </div>
-    
-    <div class="market-footer">
-      ✨ Toegevoegd op ${formatDate(market.toegevoegdOp)}
-    </div>
-  `;
 }
 
-function createListView(market, eventType, dateTime, endTime) {
-  const hasImage = market.imageUrl && market.imageUrl !== '';
+// Test functie om handmatig markten toe te voegen (voor debugging)
+async function addTestMarket() {
+  if (!currentUser) {
+    console.log('❌ Geen gebruiker ingelogd voor test market');
+    return;
+  }
   
-  return `
-    ${hasImage ? `
-      <img src="${market.imageUrl}" alt="${escapeHtml(market.naam)}" class="market-image" loading="lazy">
-    ` : `
-      <div class="market-image" style="background: linear-gradient(135deg, ${getGradientForType(market.type)}); display: flex; align-items: center; justify-content: center; font-size: 2rem;">
-        ${eventType.icon}
-      </div>
-    `}
+  try {
+    const testMarket = {
+      userId: currentUser.uid,
+      email: currentUser.email,
+      naam: 'Test Rommelmarkt',
+      type: 'rommelmarkt',
+      locatie: 'Teststraat 1, 1000 Brussel',
+      organisator: 'Test Organisator',
+      datumStart: Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)), // Volgende week
+      datumEind: null,
+      aantalStanden: 50,
+      standgeld: 2.5,
+      contact: 'test@example.com',
+      beschrijving: 'Dit is een test rommelmarkt voor debugging',
+      imageUrl: '',
+      toegevoegdOp: Timestamp.now(),
+      status: 'actief'
+    };
     
-    <div class="market-info">
-      <div class="market-type-badge ${eventType.color}">
-        ${eventType.icon} ${eventType.label}
-      </div>
-      <h3>${escapeHtml
+    console.log('🧪 Adding test market:', testMarket);
+    const docRef = await addDoc(collection(db, 'rommelmarkten'), testMarket);
+    console.log('✅ Test market added with ID:', docRef.id);
+    
+    // Reload markets
+    loadMarketsPublic();
+    
+  } catch (error) {
+    console.error('❌ Error adding test market:', error);
+  }
+}
+
+// Console helper functies voor debugging
+console.log('🔧 Debug functies beschikbaar in console:');
+console.log('  - loadMarketsPublic() - Herlaad markten met debug output');
+console.log('  - addTestMarket() - Voeg test market toe (als ingelogd)');
+console.log('  - allMarkets - Bekijk alle geladen markten');
+console.log('  - filteredMarkets - Bekijk gefilterde markten');
+
+// Maak functies globaal beschikbaar voor console testing
+if (typeof window !== 'undefined') {
+  window.debugLoadMarkets = loadMarketsPublic;
+  window.addTestMarket = addTestMarket;
+  window.debugInfo = () => {
+    console.log('🔍 Debug Info:');
+    console.log('- Current User:', currentUser);
+    console.log('- All Markets:', allMarkets);
+    console.log('- Filtered Markets:', filteredMarkets);
+    console.log('- Markets Container:', marketsContainer);
+    console.log('- Loading Div:', loadingMarketsDiv);
+    console.log('- No Markets Div:', noMarketsDiv);
+  };
+}

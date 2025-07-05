@@ -70,6 +70,41 @@
       </div>
     </div>
 
+    <!-- Admin Panel (only for admin users) -->
+    <section id="admin-panel" class="admin-section" style="display: none;">
+      <div class="container">
+        <div class="section-header">
+          <h2>🔧 Admin Panel</h2>
+          <p>Bulk import van rommelmarkt data</p>
+        </div>
+        
+        <div class="admin-card">
+          <h3>Bulk Data Import</h3>
+          <p>Plak hier je rommelmarkt data om ze automatisch te verwerken:</p>
+          
+          <form id="bulk-import-form">
+            <div class="form-group full-width">
+              <label for="bulk-data">Rommelmarkt Data:</label>
+              <textarea id="bulk-data" rows="15" placeholder="Plak hier de rommelmarkt data..."></textarea>
+            </div>
+            
+            <div class="admin-actions">
+              <button type="submit" class="btn btn-primary btn-large">
+                <span class="btn-icon">📥</span>
+                Data Importeren
+              </button>
+              <button type="button" id="clear-all-btn" class="btn btn-danger">
+                <span class="btn-icon">🗑️</span>
+                Alle Data Wissen
+              </button>
+            </div>
+          </form>
+          
+          <div id="import-results" class="import-results" style="display: none;"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Add Market Section -->
     <section id="toevoegen" class="add-market-section">
       <div class="container">

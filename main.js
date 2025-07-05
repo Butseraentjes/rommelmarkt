@@ -67,10 +67,30 @@ async function handleLogin() {
   try {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="btn-icon">⏳</span> Inloggen...';
-    await signInWithPopup(auth, provider);
+    
+    // Extra configuratie voor popup om CORP warnings te minimaliseren
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    const result = await signInWithPopup(auth, provider);
+    console.log('Login succesvol:', result.user.email);
+    
   } catch (err) {
     console.error('Login fout:', err);
-    alert('Er ging iets mis bij het inloggen. Probeer opnieuw.');
+    
+    // Specifieke foutafhandeling
+    let errorMessage = 'Er ging iets mis bij het inloggen. Probeer opnieuw.';
+    
+    if (err.code === 'auth/popup-closed-by-user') {
+      errorMessage = 'Login geannuleerd. Probeer opnieuw als je wilt inloggen.';
+    } else if (err.code === 'auth/popup-blocked') {
+      errorMessage = 'Popup werd geblokkeerd door je browser. Sta popups toe en probeer opnieuw.';
+    }
+    
+    alert(errorMessage);
+    
+  } finally {
     loginBtn.disabled = false;
     loginBtn.innerHTML = '<span class="btn-icon">🔐</span> Inloggen met Google';
   }
@@ -219,11 +239,21 @@ async function loadMarkets() {
   try {
     showLoadingState();
     
-    const q = query(
-      collection(db, 'rommelmarkten'),
-      where('status', '==', 'actief'),
-      orderBy('datumStart', 'asc')
-    );
+    // Tijdelijke fallback zonder status filter als index nog niet bestaat
+    let q;
+    try {
+      q = query(
+        collection(db, 'rommelmarkten'),
+        where('status', '==', 'actief'),
+        orderBy('datumStart', 'asc')
+      );
+    } catch (indexError) {
+      console.log('Index nog niet klaar, gebruik eenvoudige query...');
+      q = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('datumStart', 'asc')
+      );
+    }
     
     const querySnapshot = await getDocs(q);
     allMarkets = [];
@@ -231,11 +261,12 @@ async function loadMarkets() {
     querySnapshot.forEach((doc) => {
       const market = { id: doc.id, ...doc.data() };
       
-      // Alleen toekomstige evenementen tonen
+      // Filter op actieve status en toekomstige evenementen
       const now = new Date();
       const marketDate = market.datumStart.toDate();
+      const isActive = !market.status || market.status === 'actief';
       
-      if (marketDate > now) {
+      if (marketDate > now && isActive) {
         allMarkets.push(market);
       }
     });
@@ -245,7 +276,38 @@ async function loadMarkets() {
 
   } catch (error) {
     console.error('Fout bij laden evenementen:', error);
-    showErrorState();
+    
+    // Probeer backup query zonder where clause
+    try {
+      console.log('Probeer backup query...');
+      const backupQuery = query(
+        collection(db, 'rommelmarkten'),
+        orderBy('toegevoegdOp', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(backupQuery);
+      allMarkets = [];
+
+      querySnapshot.forEach((doc) => {
+        const market = { id: doc.id, ...doc.data() };
+        const now = new Date();
+        const marketDate = market.datumStart.toDate();
+        
+        if (marketDate > now) {
+          allMarkets.push(market);
+        }
+      });
+      
+      // Sorteer handmatig op datum
+      allMarkets.sort((a, b) => a.datumStart.toDate() - b.datumStart.toDate());
+      
+      displayMarkets(allMarkets);
+      updateStats();
+      
+    } catch (backupError) {
+      console.error('Ook backup query mislukt:', backupError);
+      showErrorState();
+    }
   }
 }
 
